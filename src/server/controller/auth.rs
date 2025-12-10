@@ -2,6 +2,7 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Redirect},
+    Json,
 };
 use serde::Deserialize;
 use tower_sessions::Session;
@@ -32,9 +33,9 @@ pub async fn login(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
-    let login_service = DiscordAuthService::new(state.oauth_client);
+    let auth_service = DiscordAuthService::new(state.http_client, state.oauth_client);
 
-    let (url, csrf_token) = login_service.login_url();
+    let (url, csrf_token) = auth_service.login_url();
 
     // Store CSRF token in session for verification during callback
     session
@@ -49,9 +50,13 @@ pub async fn callback(
     session: Session,
     params: Query<CallbackParams>,
 ) -> Result<impl IntoResponse, AppError> {
+    let auth_service = DiscordAuthService::new(state.http_client, state.oauth_client);
+
     validate_csrf(&session, &params.0.state).await?;
 
-    Ok(StatusCode::OK)
+    let user = auth_service.callback(params.0.code).await?;
+
+    Ok((StatusCode::OK, Json(user)))
 }
 
 async fn validate_csrf(session: &Session, csrf_state: &str) -> Result<(), AppError> {

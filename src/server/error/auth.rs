@@ -3,9 +3,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use oauth2::{basic::BasicErrorResponseType, HttpClientError, StandardErrorResponse};
 use thiserror::Error;
 
-use crate::model::api::ErrorDto;
+use crate::{model::api::ErrorDto, server::error::InternalServerError};
 
 #[derive(Error, Debug)]
 pub enum AuthError {
@@ -16,6 +17,14 @@ pub enum AuthError {
     /// Results in a 400 Bad Request response.
     #[error("Failed to login user due to CSRF state mismatch")]
     CsrfValidationFailed,
+    #[error(transparent)]
+    RequestTokenErr(
+        #[from]
+        oauth2::RequestTokenError<
+            HttpClientError<reqwest::Error>,
+            StandardErrorResponse<BasicErrorResponseType>,
+        >,
+    ),
 }
 
 /// Converts authentication errors into HTTP responses.
@@ -43,6 +52,7 @@ impl IntoResponse for AuthError {
                 }),
             )
                 .into_response(),
+            err => InternalServerError(err).into_response(),
         }
     }
 }

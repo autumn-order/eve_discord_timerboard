@@ -18,11 +18,11 @@ impl Config {
     pub fn from_env() -> Result<Self, AppError> {
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
-                .map_err(|_| ConfigError::MissingEnvVar("DISCORD_CLIENT_ID".to_string()))?,
+                .map_err(|_| ConfigError::MissingEnvVar("DATABASE_URL".to_string()))?,
             discord_client_id: std::env::var("DISCORD_CLIENT_ID")
                 .map_err(|_| ConfigError::MissingEnvVar("DISCORD_CLIENT_SECRET".to_string()))?,
             discord_client_secret: std::env::var("DISCORD_CLIENT_SECRET")
-                .map_err(|_| ConfigError::MissingEnvVar("DATABASE_URL".to_string()))?,
+                .map_err(|_| ConfigError::MissingEnvVar("DISCORD_CLIENT_SECRET".to_string()))?,
             discord_redirect_url: std::env::var("DISCORD_REDIRECT_URL")
                 .map_err(|_| ConfigError::MissingEnvVar("DISCORD_REDIRECT_URL".to_string()))?,
             discord_auth_url: DISCORD_AUTH_URL.to_string(),

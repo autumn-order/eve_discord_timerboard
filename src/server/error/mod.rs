@@ -26,6 +26,10 @@ pub enum AppError {
     SqlxErr(#[from] sea_orm::SqlxError),
     #[error(transparent)]
     SessionErr(#[from] tower_sessions::session::Error),
+    #[error(transparent)]
+    ReqwestErr(#[from] reqwest::Error),
+    #[error(transparent)]
+    DiscordErr(#[from] serenity::Error),
 }
 
 impl IntoResponse for AppError {

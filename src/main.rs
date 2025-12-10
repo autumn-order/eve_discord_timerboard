@@ -35,13 +35,18 @@ fn main() {
 
         let db = startup::connect_to_database(&config).await?;
         let session = startup::connect_to_session(&db).await?;
+        let http_client = startup::setup_reqwest_client();
         let oauth_client = startup::setup_oauth_client(&config);
 
         tracing::info!("Starting server");
 
         let mut router = dioxus::server::router(App);
         let server_routes = server::router::router()
-            .with_state(AppState { db, oauth_client })
+            .with_state(AppState {
+                db,
+                http_client,
+                oauth_client,
+            })
             .layer(session);
         router = router.merge(server_routes);
 

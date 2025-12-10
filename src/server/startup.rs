@@ -70,6 +70,16 @@ pub async fn connect_to_session(
     Ok(session)
 }
 
+pub fn setup_reqwest_client() -> reqwest::Client {
+    let http_client = reqwest::ClientBuilder::new()
+        // Following redirects opens the client up to SSRF vulnerabilities.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Client should build");
+
+    http_client
+}
+
 /// Setup OAuth2 client for Discord login
 pub fn setup_oauth_client(config: &Config) -> OAuth2Client {
     let client_id = ClientId::new(config.discord_client_id.to_string());
