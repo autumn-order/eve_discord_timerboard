@@ -1,5 +1,7 @@
 use oauth2::basic::BasicClient;
 use oauth2::{AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
+use tower_sessions::{cookie::SameSite, Expiry, SessionManagerLayer};
+use tower_sessions_sqlx_store::SqliteStore;
 
 use crate::server::state::OAuth2Client;
 use crate::server::{config::Config, error::AppError};
@@ -29,6 +31,43 @@ pub async fn connect_to_database(config: &Config) -> Result<sea_orm::DatabaseCon
     Migrator::up(&db, None).await?;
 
     Ok(db)
+}
+
+/// Creates a session manager using SQLite for session storage
+///
+/// Sets up session handling with SQLite as the backing store. Sessions expire after 7 days
+/// of inactivity. Cookie security settings are automatically configured based on build mode
+/// (secure cookies in release, non-secure in debug for easier local development).
+///
+/// # Arguments
+/// - `db` - Database connection to use for session storage
+///
+/// # Returns
+/// - `Ok(SessionManagerLayer)` - Configured session manager
+/// - `Err(AppError)` - Failed to initialize session store
+pub async fn connect_to_session(
+    db: &sea_orm::DatabaseConnection,
+) -> Result<SessionManagerLayer<SqliteStore>, AppError> {
+    use time::Duration;
+
+    // Get the underlying SQLx pool from SeaORM connection
+    let pool = db.get_sqlite_connection_pool();
+    let session_store = SqliteStore::new(pool.clone());
+
+    // Initialize the session table in the database
+    session_store.migrate().await?;
+
+    // Set secure based on build mode: in development (debug) use false, otherwise true.
+    let development_mode = cfg!(debug_assertions);
+    let secure_cookies = !development_mode;
+
+    let session = SessionManagerLayer::new(session_store)
+        .with_secure(secure_cookies)
+        .with_same_site(SameSite::Lax)
+        .with_http_only(true)
+        .with_expiry(Expiry::OnInactivity(Duration::days(7)));
+
+    Ok(session)
 }
 
 /// Setup OAuth2 client for Discord login

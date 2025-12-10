@@ -11,9 +11,13 @@ use crate::model::api::ErrorDto;
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error(transparent)]
-    ConfigError(#[from] ConfigError),
+    ConfigErr(#[from] ConfigError),
     #[error(transparent)]
     DbErr(#[from] sea_orm::DbErr),
+    #[error(transparent)]
+    SqlxErr(#[from] sea_orm::SqlxError),
+    #[error(transparent)]
+    SessionErr(#[from] tower_sessions::session::Error),
 }
 
 #[derive(Error, Debug)]
