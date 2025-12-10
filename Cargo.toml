@@ -1,17 +1,24 @@
 [package]
 name = "eve_discord_timerboard"
 version = "0.1.0"
-authors = ["hyziri <hyziri@protonmail.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = [".", "migration"]
+
 [dependencies]
-dioxus = { version = "0.7.1", features = ["router", "fullstack"] }
+dioxus = { version = "0.7.1", features = ["fullstack", "router"] }
+sea-orm = { version = "2.0.0-rc.11", features = [
+  "runtime-tokio-rustls",
+  "sqlx-postgres",
+  "with-chrono"
+], optional = true }
 
 [features]
 default = ["web"]
-web = ["dioxus/web"]
 desktop = ["dioxus/desktop"]
 mobile = ["dioxus/mobile"]
-server = ["dioxus/server"]
+server = ["dioxus/server", "sea-orm"]
+web = ["dioxus/web"]
