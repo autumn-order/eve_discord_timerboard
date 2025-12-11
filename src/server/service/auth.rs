@@ -1,3 +1,4 @@
+use dioxus_logger::tracing;
 use oauth2::{
     basic::BasicTokenType, AuthorizationCode, CsrfToken, EmptyExtraTokenFields, Scope,
     StandardTokenResponse, TokenResponse,
@@ -45,7 +46,7 @@ impl<'a> AuthService<'a> {
     pub async fn callback(
         &self,
         authorization_code: String,
-        is_admin: bool,
+        set_admin: bool,
     ) -> Result<entity::user::Model, AppError> {
         let user_repo = UserRepository::new(&self.db);
 
@@ -59,7 +60,11 @@ impl<'a> AuthService<'a> {
             .map_err(AuthError::from)?;
 
         let user = self.fetch_discord_user(&token).await?;
-        let new_user = user_repo.upsert(user, is_admin).await?;
+        let new_user = user_repo.upsert(user, set_admin).await?;
+
+        if set_admin {
+            tracing::info!("User {} has been set as admin", new_user.name)
+        }
 
         Ok(new_user)
     }

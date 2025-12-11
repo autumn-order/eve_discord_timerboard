@@ -6,7 +6,7 @@ use oauth2::{
 };
 use sea_orm::DatabaseConnection;
 
-use super::service::admin::AdminCodeService;
+use super::service::admin::code::AdminCodeService;
 
 pub(crate) type OAuth2Client = Client<
     StandardErrorResponse<BasicErrorResponseType>,

@@ -27,6 +27,8 @@ pub enum AuthError {
     UserNotInSession,
     #[error("User {0} not found in database")]
     UserNotInDatabase(i32),
+    #[error("Access denied for user {0}: {1}")]
+    AccessDenied(i32, String),
     #[error(transparent)]
     RequestTokenErr(
         #[from]
@@ -76,6 +78,13 @@ impl IntoResponse for AuthError {
                 StatusCode::FORBIDDEN,
                 Json(ErrorDto {
                     error: "Invalid or expired admin code.".to_string(),
+                }),
+            )
+                .into_response(),
+            Self::AccessDenied(_, _) => (
+                StatusCode::FORBIDDEN,
+                Json(ErrorDto {
+                    error: "Insufficient permissions".to_string(),
                 }),
             )
                 .into_response(),

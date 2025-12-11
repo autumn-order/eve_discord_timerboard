@@ -8,11 +8,11 @@ use serde::Deserialize;
 use tower_sessions::Session;
 
 /// Session key for CSRF token
-static SESSION_OAUTH_CSRF_TOKEN: &str = "auth:csrf_token";
+pub static SESSION_AUTH_CSRF_TOKEN: &str = "auth:csrf_token";
 /// Session key for whether to set user as admin
-static SESSION_ADMIN_CODE_VALIDATED: &str = "auth:set_admin";
+static SESSION_AUTH_SET_ADMIN: &str = "auth:set_admin";
 /// Session key for current user ID
-static SESSION_USER_ID: &str = "auth:user";
+pub static SESSION_AUTH_USER_ID: &str = "auth:user";
 
 use crate::server::{
     error::{auth::AuthError, AppError},
@@ -60,14 +60,14 @@ pub async fn login(
         }
 
         // Store admin code validation success in session
-        session.insert(SESSION_ADMIN_CODE_VALIDATED, true).await?;
+        session.insert(SESSION_AUTH_SET_ADMIN, true).await?;
     }
 
     let (url, csrf_token) = auth_service.login_url();
 
     // Store CSRF token in session for verification during callback
     session
-        .insert(SESSION_OAUTH_CSRF_TOKEN, csrf_token.secret())
+        .insert(SESSION_AUTH_CSRF_TOKEN, csrf_token.secret())
         .await?;
 
     Ok(Redirect::temporary(url.as_str()))
@@ -83,21 +83,21 @@ pub async fn callback(
     validate_csrf(&session, &params.0.state).await?;
 
     // Check if admin code was validated in the login flow
-    let is_admin: bool = session
-        .remove(SESSION_ADMIN_CODE_VALIDATED)
+    let set_admin: bool = session
+        .remove(SESSION_AUTH_SET_ADMIN)
         .await?
         .unwrap_or(false);
 
-    let new_user = auth_service.callback(params.0.code, is_admin).await?;
+    let new_user = auth_service.callback(params.0.code, set_admin).await?;
 
-    session.insert(SESSION_USER_ID, new_user.id).await?;
+    session.insert(SESSION_AUTH_USER_ID, new_user.id).await?;
 
     Ok(Redirect::permanent("/"))
 }
 
 pub async fn logout(session: Session) -> Result<impl IntoResponse, AppError> {
     // Only clear session if there actually is a user in session
-    if let Some(_user_id) = session.get::<i32>(SESSION_USER_ID).await? {
+    if let Some(_user_id) = session.get::<i32>(SESSION_AUTH_USER_ID).await? {
         session.clear().await;
     }
 
@@ -111,7 +111,7 @@ pub async fn get_user(
 ) -> Result<impl IntoResponse, AppError> {
     let user_service = UserService::new(&state.db);
 
-    let Some(user_id) = session.get(SESSION_USER_ID).await? else {
+    let Some(user_id) = session.get(SESSION_AUTH_USER_ID).await? else {
         return Err(AuthError::UserNotInSession.into());
     };
 
@@ -123,7 +123,7 @@ pub async fn get_user(
 }
 
 async fn validate_csrf(session: &Session, csrf_state: &str) -> Result<(), AppError> {
-    let stored_state: Option<String> = session.remove(SESSION_OAUTH_CSRF_TOKEN).await?;
+    let stored_state: Option<String> = session.remove(SESSION_AUTH_CSRF_TOKEN).await?;
 
     if let Some(state) = stored_state {
         if state == csrf_state {
