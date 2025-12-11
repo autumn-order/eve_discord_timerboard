@@ -23,6 +23,10 @@ pub enum AuthError {
     /// Results in a 403 Forbidden response.
     #[error("Invalid or expired admin code")]
     AdminCodeValidationFailed,
+    #[error("User not found in session")]
+    UserNotInSession,
+    #[error("User {0} not found in database")]
+    UserNotInDatabase(i32),
     #[error(transparent)]
     RequestTokenErr(
         #[from]
@@ -50,6 +54,14 @@ pub enum AuthError {
 /// - 500 Internal Server Error - For unexpected authentication errors
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
+        let user_not_found = (
+            StatusCode::NOT_FOUND,
+            Json(ErrorDto {
+                error: "User not found".to_string(),
+            }),
+        )
+            .into_response();
+
         match self {
             Self::CsrfValidationFailed => (
                 StatusCode::BAD_REQUEST,
@@ -58,6 +70,8 @@ impl IntoResponse for AuthError {
                 }),
             )
                 .into_response(),
+            Self::UserNotInSession => user_not_found,
+            Self::UserNotInDatabase(_) => user_not_found,
             Self::AdminCodeValidationFailed => (
                 StatusCode::FORBIDDEN,
                 Json(ErrorDto {

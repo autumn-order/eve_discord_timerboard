@@ -8,14 +8,16 @@ use serde::Deserialize;
 use tower_sessions::Session;
 
 /// Session key for CSRF token
-static SESSION_OAUTH_CSRF_TOKEN: &str = "oauth:csrf_token";
-/// Session key for admin code validation
-static SESSION_ADMIN_CODE_VALIDATED: &str = "admin:code_validated";
+static SESSION_OAUTH_CSRF_TOKEN: &str = "auth:csrf_token";
+/// Session key for whether to set user as admin
+static SESSION_ADMIN_CODE_VALIDATED: &str = "auth:set_admin";
+/// Session key for current user ID
+static SESSION_USER_ID: &str = "auth:user";
 
 use crate::server::{
     data::discord::user::DiscordUserRepository,
     error::{auth::AuthError, AppError},
-    service::auth::DiscordAuthService,
+    service::{auth::DiscordAuthService, user::UserService},
     state::AppState,
 };
 
@@ -89,7 +91,27 @@ pub async fn callback(
         .unwrap_or(false);
 
     let user = auth_service.callback(params.0.code).await?;
-    let _new_user = discord_user_repo.upsert(user.clone(), is_admin).await?;
+    let new_user = discord_user_repo.upsert(user.clone(), is_admin).await?;
+
+    session.insert(SESSION_USER_ID, new_user.id).await?;
+
+    Ok((StatusCode::OK, Json(user)))
+}
+
+/// Retrieve information for user with active session
+pub async fn get_user(
+    State(state): State<AppState>,
+    session: Session,
+) -> Result<impl IntoResponse, AppError> {
+    let user_service = UserService::new(&state.db);
+
+    let Some(user_id) = session.get(SESSION_USER_ID).await? else {
+        return Err(AuthError::UserNotInSession.into());
+    };
+
+    let Some(user) = user_service.get_user(user_id).await? else {
+        return Err(AuthError::UserNotInDatabase(user_id).into());
+    };
 
     Ok((StatusCode::OK, Json(user)))
 }

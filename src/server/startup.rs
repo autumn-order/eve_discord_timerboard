@@ -125,7 +125,7 @@ pub async fn check_for_admin(
     use dioxus_logger::tracing;
 
     let user_repo = DiscordUserRepository::new(db);
-    let has_admin = user_repo.has_admin().await?;
+    let has_admin = user_repo.admin_exists().await?;
 
     if !has_admin {
         let admin_code = admin_code_service.generate().await;

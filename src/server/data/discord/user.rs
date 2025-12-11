@@ -34,13 +34,22 @@ impl<'a> DiscordUserRepository<'a> {
         .await
     }
 
+    pub async fn find_by_id(
+        &self,
+        user_id: i32,
+    ) -> Result<Option<entity::discord_user::Model>, DbErr> {
+        entity::prelude::DiscordUser::find_by_id(user_id)
+            .one(self.db)
+            .await
+    }
+
     /// Checks if any admin users exist in the database.
     ///
     /// # Returns
     /// - `Ok(true)` if at least one admin user exists
     /// - `Ok(false)` if no admin users exist
     /// - `Err(DbErr)` if the database query fails
-    pub async fn has_admin(&self) -> Result<bool, DbErr> {
+    pub async fn admin_exists(&self) -> Result<bool, DbErr> {
         let admin_count = entity::prelude::DiscordUser::find()
             .filter(entity::discord_user::Column::Admin.eq(true))
             .count(self.db)
