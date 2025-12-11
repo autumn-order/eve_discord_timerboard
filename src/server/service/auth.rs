@@ -12,13 +12,13 @@ use crate::server::{
     state::OAuth2Client,
 };
 
-pub struct DiscordAuthService<'a> {
+pub struct AuthService<'a> {
     pub db: &'a DatabaseConnection,
     pub http_client: &'a reqwest::Client,
     pub oauth_client: &'a OAuth2Client,
 }
 
-impl<'a> DiscordAuthService<'a> {
+impl<'a> AuthService<'a> {
     pub fn new(
         db: &'a DatabaseConnection,
         http_client: &'a reqwest::Client,
