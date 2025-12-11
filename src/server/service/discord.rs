@@ -1,12 +1,14 @@
 use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
-use serenity::all::{Role, RoleId};
+use serenity::all::{GuildId, Role, RoleId};
 use std::collections::HashMap;
 
 use crate::{
     model::discord::DiscordGuildDto,
     server::{
-        data::discord::{DiscordGuildRepository, DiscordGuildRoleRepository},
+        data::discord::{
+            DiscordGuildRepository, DiscordGuildRoleRepository, UserDiscordGuildRepository,
+        },
         error::AppError,
     },
 };
@@ -72,6 +74,54 @@ impl<'a> DiscordGuildRoleService<'a> {
         role_repo.upsert_many(guild_id, guild_roles).await?;
 
         tracing::info!("Updated {} roles for guild {}", guild_roles.len(), guild_id);
+
+        Ok(())
+    }
+}
+
+pub struct UserDiscordGuildService<'a> {
+    db: &'a DatabaseConnection,
+}
+
+impl<'a> UserDiscordGuildService<'a> {
+    pub fn new(db: &'a DatabaseConnection) -> Self {
+        Self { db }
+    }
+
+    /// Syncs a user's guild memberships with guilds the bot is present in
+    /// Only creates relationships for guilds where both the user and bot are members
+    pub async fn sync_user_guilds(
+        &self,
+        user_id: i32,
+        user_guild_ids: &[GuildId],
+    ) -> Result<(), AppError> {
+        let guild_repo = DiscordGuildRepository::new(self.db);
+        let user_guild_repo = UserDiscordGuildRepository::new(self.db);
+
+        // Get all guilds the bot is in
+        let bot_guilds = guild_repo.get_all().await?;
+
+        // Find matching guilds (where both user and bot are members)
+        let matching_guild_ids: Vec<i32> = bot_guilds
+            .iter()
+            .filter(|bot_guild| {
+                user_guild_ids
+                    .iter()
+                    .any(|user_guild_id| user_guild_id.get() == bot_guild.guild_id as u64)
+            })
+            .map(|guild| guild.id)
+            .collect();
+
+        // Sync the user's guild memberships
+        user_guild_repo
+            .sync_user_guilds(user_id, &matching_guild_ids)
+            .await?;
+
+        tracing::info!(
+            "Synced {} guild memberships for user {}",
+            matching_guild_ids.len(),
+            user_id
+        );
 
         Ok(())
     }

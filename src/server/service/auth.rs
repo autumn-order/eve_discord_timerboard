@@ -4,14 +4,22 @@ use oauth2::{
     StandardTokenResponse, TokenResponse,
 };
 use sea_orm::DatabaseConnection;
-use serenity::all::User as DiscordUser;
+use serde::Deserialize;
+use serenity::all::{GuildId, User as DiscordUser};
 use url::Url;
 
 use crate::server::{
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
+    service::discord::UserDiscordGuildService,
     state::OAuth2Client,
 };
+
+/// Partial guild information returned from Discord API
+#[derive(Debug, Deserialize)]
+pub struct PartialGuild {
+    pub id: GuildId,
+}
 
 pub struct AuthService<'a> {
     pub db: &'a DatabaseConnection,
@@ -36,8 +44,9 @@ impl<'a> AuthService<'a> {
         let (authorize_url, csrf_state) = self
             .oauth_client
             .authorize_url(|| CsrfToken::new_random())
-            // Request scope to retrieve user information without email
+            // Request scope to retrieve user information and guilds
             .add_scope(Scope::new("identify".to_string()))
+            .add_scope(Scope::new("guilds".to_string()))
             .url();
 
         (authorize_url, csrf_state)
@@ -66,6 +75,15 @@ impl<'a> AuthService<'a> {
             tracing::info!("User {} has been set as admin", new_user.name)
         }
 
+        // Fetch and sync user's Discord guilds
+        let user_guilds = self.fetch_user_guilds(&token).await?;
+        let user_guild_ids: Vec<GuildId> = user_guilds.iter().map(|g| g.id).collect();
+
+        let user_guild_service = UserDiscordGuildService::new(self.db);
+        user_guild_service
+            .sync_user_guilds(new_user.id, &user_guild_ids)
+            .await?;
+
         Ok(new_user)
     }
 
@@ -86,5 +104,24 @@ impl<'a> AuthService<'a> {
             .await?;
 
         Ok(user_info)
+    }
+
+    /// Retrieves a list of guilds the Discord user is a member of
+    pub async fn fetch_user_guilds(
+        &self,
+        token: &StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
+    ) -> Result<Vec<PartialGuild>, AppError> {
+        let access_token = token.access_token().secret();
+
+        let guilds = self
+            .http_client
+            .get("https://discord.com/api/users/@me/guilds")
+            .header("Authorization", format!("Bearer {}", access_token))
+            .send()
+            .await?
+            .json::<Vec<PartialGuild>>()
+            .await?;
+
+        Ok(guilds)
     }
 }
