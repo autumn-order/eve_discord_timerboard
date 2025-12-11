@@ -2,6 +2,14 @@ use dioxus::prelude::*;
 
 use crate::client::{router::Route, store::user::UserState};
 
+const LOGO: Asset = asset!(
+    "/assets/logo_64px.png",
+    AssetOptions::image().with_size(ImageSize::Manual {
+        width: 48,
+        height: 48
+    })
+);
+
 #[component]
 pub fn Header() -> Element {
     let user_store = use_context::<Store<UserState>>();
@@ -16,8 +24,19 @@ pub fn Header() -> Element {
             div {
                 Link {
                     to: Route::Home {},
-                    p {
-                        "Timerboard"
+                    div {
+                        class: "flex items-center gap-3",
+                        img {
+                            src: LOGO,
+                        }
+                        p {
+                            class: "hidden sm:block text-xl",
+                            "Black Rose Timerboard"
+                        }
+                        p {
+                            class: "block sm:hidden text-xl",
+                            "Timerboard"
+                        }
                     }
                 }
             }

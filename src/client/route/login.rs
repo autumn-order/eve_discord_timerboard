@@ -5,6 +5,7 @@ use crate::client::component::Page;
 #[component]
 pub fn Login() -> Element {
     rsx! {
+        Title { "Login | Black Rose Timerboard" }
         Page {
             class: "flex items-center justify-center w-full h-full",
             p {
