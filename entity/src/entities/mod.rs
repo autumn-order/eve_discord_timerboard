@@ -3,4 +3,5 @@
 pub mod prelude;
 
 pub mod discord_guild;
+pub mod discord_guild_role;
 pub mod user;
