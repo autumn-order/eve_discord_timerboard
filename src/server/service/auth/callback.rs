@@ -6,7 +6,7 @@ use serenity::all::User as DiscordUser;
 
 use crate::server::{
     error::{auth::AuthError, AppError},
-    service::oauth::DiscordAuthService,
+    service::auth::DiscordAuthService,
 };
 
 impl DiscordAuthService {

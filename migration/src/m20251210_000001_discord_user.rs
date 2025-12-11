@@ -16,6 +16,7 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(DiscordUser::Id))
                     .col(big_integer_uniq(DiscordUser::DiscordId))
                     .col(string(DiscordUser::Name))
+                    .col(boolean(DiscordUser::Admin))
                     .to_owned(),
             )
             .await
@@ -35,4 +36,5 @@ pub enum DiscordUser {
     Id,
     DiscordId,
     Name,
+    Admin,
 }

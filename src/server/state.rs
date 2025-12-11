@@ -6,6 +6,8 @@ use oauth2::{
 };
 use sea_orm::DatabaseConnection;
 
+use super::service::auth::admin::AdminCodeService;
+
 pub(crate) type OAuth2Client = Client<
     StandardErrorResponse<BasicErrorResponseType>,
     StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
@@ -24,4 +26,21 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
     pub oauth_client: OAuth2Client,
+    pub admin_code_service: AdminCodeService,
+}
+
+impl AppState {
+    pub fn new(
+        db: DatabaseConnection,
+        http_client: reqwest::Client,
+        oauth_client: OAuth2Client,
+        admin_code_service: AdminCodeService,
+    ) -> Self {
+        Self {
+            db,
+            http_client,
+            oauth_client,
+            admin_code_service,
+        }
+    }
 }

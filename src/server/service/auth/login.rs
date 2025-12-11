@@ -1,7 +1,7 @@
 use oauth2::{CsrfToken, Scope};
 use url::Url;
 
-use crate::server::service::oauth::DiscordAuthService;
+use crate::server::service::auth::DiscordAuthService;
 
 impl DiscordAuthService {
     pub fn login_url(&self) -> (Url, CsrfToken) {

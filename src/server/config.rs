@@ -5,6 +5,7 @@ const DISCORD_TOKEN_URL: &str = "https://discord.com/api/oauth2/token";
 
 pub struct Config {
     pub database_url: String,
+    pub app_url: String,
 
     pub discord_client_id: String,
     pub discord_client_secret: String,
@@ -19,6 +20,8 @@ impl Config {
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
                 .map_err(|_| ConfigError::MissingEnvVar("DATABASE_URL".to_string()))?,
+            app_url: std::env::var("APP_URL")
+                .map_err(|_| ConfigError::MissingEnvVar("APP_URL".to_string()))?,
             discord_client_id: std::env::var("DISCORD_CLIENT_ID")
                 .map_err(|_| ConfigError::MissingEnvVar("DISCORD_CLIENT_SECRET".to_string()))?,
             discord_client_secret: std::env::var("DISCORD_CLIENT_SECRET")

@@ -2,6 +2,7 @@
 
 use crate::server::state::OAuth2Client;
 
+pub mod admin;
 pub mod callback;
 pub mod login;
 

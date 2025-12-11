@@ -1,8 +1,11 @@
 use oauth2::basic::BasicClient;
 use oauth2::{AuthUrl, ClientId, ClientSecret, RedirectUrl, TokenUrl};
+use sea_orm::DatabaseConnection;
 use tower_sessions::{cookie::SameSite, Expiry, SessionManagerLayer};
 use tower_sessions_sqlx_store::SqliteStore;
 
+use crate::server::data::discord::user::DiscordUserRepository;
+use crate::server::service::auth::admin::AdminCodeService;
 use crate::server::state::OAuth2Client;
 use crate::server::{config::Config, error::AppError};
 
@@ -93,4 +96,46 @@ pub fn setup_oauth_client(config: &Config) -> OAuth2Client {
         .set_auth_uri(auth_url)
         .set_token_uri(token_url)
         .set_redirect_uri(redirect_url)
+}
+
+/// Checks if any admin users exist in the database and generates an admin login link if none exist.
+///
+/// When the application starts, this function:
+/// 1. Queries the database to check if any admin users exist
+/// 2. If no admin users are found:
+///    - Generates a temporary admin code (valid for 60 seconds)
+///    - Constructs and prints a login link with the admin code to the console
+///    - The first user to login with this link will be granted admin privileges
+///
+/// The admin code is stored in memory and can only be used once. It expires after 60 seconds.
+///
+/// # Arguments
+/// - `db` - Database connection to query for admin users
+/// - `config` - Application configuration containing the app URL
+/// - `admin_code_service` - Service for generating and managing admin codes
+///
+/// # Returns
+/// - `Ok(())` if the check completes successfully
+/// - `Err(AppError)` if the database query fails
+pub async fn check_for_admin(
+    db: &DatabaseConnection,
+    config: &Config,
+    admin_code_service: &AdminCodeService,
+) -> Result<(), AppError> {
+    use dioxus_logger::tracing;
+
+    let user_repo = DiscordUserRepository::new(db);
+    let has_admin = user_repo.has_admin().await?;
+
+    if !has_admin {
+        let admin_code = admin_code_service.generate().await;
+        let login_url = format!(
+            "{}/api/auth/login?admin_code={}",
+            config.app_url, admin_code
+        );
+
+        tracing::info!("Admin Login URL (valid for 60 seconds):\n{}", login_url);
+    }
+
+    Ok(())
 }

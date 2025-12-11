@@ -28,7 +28,9 @@ fn main() {
     dioxus::serve(|| async move {
         use dioxus_logger::tracing;
 
-        use crate::server::{config::Config, startup, state::AppState};
+        use crate::server::{
+            config::Config, service::auth::admin::AdminCodeService, startup, state::AppState,
+        };
 
         dotenvy::dotenv().ok();
         let config = Config::from_env()?;
@@ -38,15 +40,22 @@ fn main() {
         let http_client = startup::setup_reqwest_client();
         let oauth_client = startup::setup_oauth_client(&config);
 
+        // Create admin code service
+        let admin_code_service = AdminCodeService::new();
+
         tracing::info!("Starting server");
+
+        // Check for admin users and generate login link if none exist
+        startup::check_for_admin(&db, &config, &admin_code_service).await?;
 
         let mut router = dioxus::server::router(App);
         let server_routes = server::router::router()
-            .with_state(AppState {
+            .with_state(AppState::new(
                 db,
                 http_client,
                 oauth_client,
-            })
+                admin_code_service,
+            ))
             .layer(session);
         router = router.merge(server_routes);
 

@@ -17,6 +17,12 @@ pub enum AuthError {
     /// Results in a 400 Bad Request response.
     #[error("Failed to login user due to CSRF state mismatch")]
     CsrfValidationFailed,
+    /// Admin code validation failed.
+    ///
+    /// The provided admin code is invalid, expired, or does not match the stored code.
+    /// Results in a 403 Forbidden response.
+    #[error("Invalid or expired admin code")]
+    AdminCodeValidationFailed,
     #[error(transparent)]
     RequestTokenErr(
         #[from]
@@ -49,6 +55,13 @@ impl IntoResponse for AuthError {
                 StatusCode::BAD_REQUEST,
                 Json(ErrorDto {
                     error: "There was an issue logging you in, please try again.".to_string(),
+                }),
+            )
+                .into_response(),
+            Self::AdminCodeValidationFailed => (
+                StatusCode::FORBIDDEN,
+                Json(ErrorDto {
+                    error: "Invalid or expired admin code.".to_string(),
                 }),
             )
                 .into_response(),

@@ -9,13 +9,25 @@ use tower_sessions::Session;
 
 /// Session key for CSRF token
 static SESSION_OAUTH_CSRF_TOKEN: &str = "oauth:csrf_token";
+/// Session key for admin code validation
+static SESSION_ADMIN_CODE_VALIDATED: &str = "admin:code_validated";
 
 use crate::server::{
     data::discord::user::DiscordUserRepository,
     error::{auth::AuthError, AppError},
-    service::oauth::DiscordAuthService,
+    service::auth::DiscordAuthService,
     state::AppState,
 };
+
+/// Query parameters for the login endpoint.
+///
+/// # Fields
+/// - `admin_code` - Code to set the user as admin on login
+#[derive(Deserialize)]
+pub struct LoginParams {
+    /// Code will be validated, setting the user as admin if successful
+    pub admin_code: Option<String>,
+}
 
 /// Query parameters for the OAuth callback endpoint.
 ///
@@ -33,8 +45,22 @@ pub struct CallbackParams {
 pub async fn login(
     State(state): State<AppState>,
     session: Session,
+    params: Query<LoginParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let auth_service = DiscordAuthService::new(state.http_client, state.oauth_client);
+    let admin_code = &params.0.admin_code;
+
+    // Validate admin code if provided
+    if let Some(code) = admin_code {
+        let is_valid = state.admin_code_service.validate_and_consume(code).await;
+
+        if !is_valid {
+            return Err(AppError::AuthErr(AuthError::AdminCodeValidationFailed));
+        }
+
+        // Store admin code validation success in session
+        session.insert(SESSION_ADMIN_CODE_VALIDATED, true).await?;
+    }
 
     let (url, csrf_token) = auth_service.login_url();
 
@@ -56,8 +82,14 @@ pub async fn callback(
 
     validate_csrf(&session, &params.0.state).await?;
 
+    // Check if admin code was validated in the login flow
+    let is_admin: bool = session
+        .remove(SESSION_ADMIN_CODE_VALIDATED)
+        .await?
+        .unwrap_or(false);
+
     let user = auth_service.callback(params.0.code).await?;
-    let _new_user = discord_user_repo.upsert(user.clone()).await?;
+    let _new_user = discord_user_repo.upsert(user.clone(), is_admin).await?;
 
     Ok((StatusCode::OK, Json(user)))
 }
