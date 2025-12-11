@@ -1,7 +1,11 @@
 use dioxus::prelude::*;
 
 use crate::{
-    client::{component::Page, router::Route, store::user::UserState},
+    client::{
+        component::page::{ErrorPage, LoadingPage},
+        router::Route,
+        store::user::UserState,
+    },
     model::user::UserDto,
 };
 
@@ -60,18 +64,9 @@ pub fn ProtectedLayout(permissions: Vec<Permission>) -> Element {
     rsx! {
         // Show loading spinner while user is being fetched
         if !fetch_completed {
-            Page { class: "flex items-center justify-center",
-                span {
-                    class: "loading loading-spinner loading-xl"
-                }
-            }
+            LoadingPage {  }
         } else if user_logged_in && !has_required_permissions {
-            Page { class: "flex items-center justify-center",
-                div { class: "flex flex-col items-center gap-2",
-                    h1 { class: "text-3xl md:text-4xl", "403 Forbidden" }
-                    p { class:"text-xl", "You don't have permission to view this page" }
-                }
-            }
+            ErrorPage { status: 403, message: "You don't have permission to view this page" }
         }
         // Render page if user is fetched, logged in, and has required permissions
         else if user_logged_in && has_required_permissions {

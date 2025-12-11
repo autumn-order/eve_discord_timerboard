@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
-use crate::client::component::Page;
+use crate::client::component::page::LoadingPage;
+use crate::client::component::{page::ErrorPage, Page};
 use crate::model::{api::ErrorDto, discord::DiscordGuildDto};
 
 #[cfg(feature = "web")]
@@ -70,13 +71,13 @@ pub fn Admin() -> Element {
 
     rsx! {
         Title { "Admin | Black Rose Timerboard" }
-        Page {
-            class: "flex flex-col items-center w-full h-full",
-            h1 {
-                class: "text-2xl font-bold mb-6",
-                "Admin - Discord Servers"
-            }
-            if let Some(Ok(guild_list)) = guilds() {
+        if let Some(Ok(guild_list)) = guilds() {
+            Page {
+                class: "flex flex-col items-center w-full h-full",
+                h1 {
+                    class: "text-2xl font-bold mb-6",
+                    "Admin - Discord Servers"
+                }
                 div {
                     class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-6xl",
                     for guild in guild_list {
@@ -108,14 +109,11 @@ pub fn Admin() -> Element {
                         }
                     }
                 }
-            } else if let Some(Err(error)) = guilds() {
-                div {
-                    class: "text-red-500",
-                    p { "Error loading guilds: {error}" }
-                }
-            } else {
-                p { "Loading guilds..." }
             }
+        } else if let Some(Err(error)) = guilds() {
+            ErrorPage { status: 500, message: error }
+        } else {
+            LoadingPage { }
         }
     }
 }

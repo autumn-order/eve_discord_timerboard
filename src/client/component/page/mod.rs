@@ -1,3 +1,9 @@
+pub mod error;
+pub mod loading;
+
+pub use error::ErrorPage;
+pub use loading::LoadingPage;
+
 use dioxus::prelude::*;
 
 #[component]
