@@ -1,9 +1,10 @@
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::fa_brands_icons::FaDiscord, Icon};
 
-use crate::client::{router::Route, store::user::UserState};
+use crate::client::{constant::SITE_NAME, router::Route, store::user::UserState};
 
 const LOGO: Asset = asset!(
-    "/assets/logo_64px.png",
+    "/assets/logo.webp",
     AssetOptions::image().with_size(ImageSize::Manual {
         width: 48,
         height: 48
@@ -18,7 +19,7 @@ pub fn Header() -> Element {
     let fetch_completed = user_store.read().fetched;
 
     rsx!(div {
-        class: "fixed flex justify-between w-full h-20 py-2 px-4 bg-base-200",
+        class: "fixed flex justify-between gap-4 w-full h-20 py-2 px-4 bg-base-200",
         div {
             class: "flex items-center",
             div {
@@ -30,12 +31,8 @@ pub fn Header() -> Element {
                             src: LOGO,
                         }
                         p {
-                            class: "hidden sm:block text-xl",
-                            "Black Rose Timerboard"
-                        }
-                        p {
-                            class: "block sm:hidden text-xl",
-                            "Timerboard"
+                            class: "md:text-xl text-wrap",
+                            {SITE_NAME}
                         }
                     }
                 }
@@ -45,20 +42,25 @@ pub fn Header() -> Element {
         div {
             class: "flex items-center",
             if fetch_completed && user_logged_in {
-                div {
-                    class: "btn btn-outline",
-                    a {
-                        href: "/api/auth/logout",
+                a {
+                    href: "/api/auth/logout",
+                    div {
+                        class: "btn btn-outline",
                         p {
                             "Logout"
                         }
                     }
                 }
             } else if fetch_completed {
-                div {
-                    class: "btn btn-outline",
-                    a {
-                        href: "/api/auth/login",
+                a {
+                    href: "/api/auth/login",
+                    div {
+                        class: "btn btn-outline flex gap-2 items-center",
+                        Icon {
+                            width: 22,
+                            height: 22,
+                            icon: FaDiscord
+                        }
                         p {
                             "Login"
                         }

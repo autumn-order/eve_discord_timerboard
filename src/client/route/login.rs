@@ -1,6 +1,15 @@
 use dioxus::prelude::*;
+use dioxus_free_icons::{icons::fa_brands_icons::FaDiscord, Icon};
 
-use crate::client::{component::Page, router::Route, store::user::UserState};
+use crate::client::{component::Page, constant::SITE_NAME, router::Route, store::user::UserState};
+
+const LOGO: Asset = asset!(
+    "/assets/logo.webp",
+    AssetOptions::image().with_size(ImageSize::Manual {
+        width: 176,
+        height: 176
+    })
+);
 
 #[component]
 pub fn Login() -> Element {
@@ -20,9 +29,34 @@ pub fn Login() -> Element {
     rsx! {
         Title { "Login | Black Rose Timerboard" }
         Page {
-            class: "flex items-center justify-center w-full h-full",
-            p {
-                "This is a login page"
+            class: "flex flex-col gap-6 items-center justify-center w-full h-full",
+            div {
+                class: "flex flex-col items-center gap-4",
+                img {
+                    width: 176,
+                    height: 176,
+                    src: LOGO,
+                }
+                p {
+                    class: "text-2xl",
+                    {SITE_NAME}
+                }
+            }
+            div {
+                a {
+                    href: "/api/auth/login",
+                    div {
+                        class: "btn btn-outline flex gap-2 items-center",
+                        Icon {
+                            width: 24,
+                            height: 24,
+                            icon: FaDiscord
+                        }
+                        p {
+                            "Login with Discord"
+                        }
+                    }
+                }
             }
         }
     }
