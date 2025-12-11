@@ -71,7 +71,7 @@ pub async fn login(
         .insert(SESSION_OAUTH_CSRF_TOKEN, csrf_token.secret())
         .await?;
 
-    Ok(Redirect::temporary(&url.to_string()))
+    Ok(Redirect::temporary(url.as_str()))
 }
 
 pub async fn callback(
@@ -95,7 +95,7 @@ pub async fn callback(
 
     session.insert(SESSION_USER_ID, new_user.id).await?;
 
-    Ok((StatusCode::OK, Json(user)))
+    Ok(Redirect::permanent("/"))
 }
 
 /// Retrieve information for user with active session

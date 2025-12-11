@@ -18,7 +18,7 @@ impl DiscordAuthService {
             .exchange_code(auth_code)
             .request_async(&self.http_client)
             .await
-            .map_err(|e| AuthError::from(e))?;
+            .map_err(AuthError::from)?;
 
         let user = self.fetch_discord_user(&token).await?;
 

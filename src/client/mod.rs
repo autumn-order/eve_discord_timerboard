@@ -1,6 +1,7 @@
 pub mod app;
-pub mod components;
+pub mod component;
+pub mod route;
 pub mod router;
-pub mod routes;
+pub mod store;
 
 pub use app::App;

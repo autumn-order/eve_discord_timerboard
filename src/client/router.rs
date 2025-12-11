@@ -1,12 +1,15 @@
 use dioxus::prelude::*;
 
-use crate::client::components::Header;
-use crate::client::routes::Home;
+use crate::client::component::ProtectedLayout;
+use crate::client::route::{timerboard::Home, Login};
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
 pub enum Route {
-    #[layout(Header)]
+    #[route("/login")]
+    Login {},
+
+    #[layout(ProtectedLayout)]
     #[route("/")]
     Home {},
 }
