@@ -4,6 +4,7 @@ use serenity::all::{ActivityData, Client, Context, EventHandler, GatewayIntents,
 use serenity::async_trait;
 
 use crate::server::config::Config;
+use crate::server::data::discord::DiscordGuildRepository;
 use crate::server::error::AppError;
 
 /// Discord bot event handler
@@ -22,7 +23,11 @@ impl EventHandler for Handler {
 
     /// Called when a guild becomes available or the bot joins a new guild
     async fn guild_create(&self, _ctx: Context, guild: Guild, _is_new: Option<bool>) {
-        tracing::info!("Guild: {} (ID: {})", guild.name, guild.id);
+        let guild_repo = DiscordGuildRepository::new(&self.db);
+
+        if let Err(e) = guild_repo.upsert(guild).await {
+            tracing::error!("Failed to upsert guild: {:?}", e);
+        }
     }
 }
 
