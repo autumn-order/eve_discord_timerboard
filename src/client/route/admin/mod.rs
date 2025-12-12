@@ -1,6 +1,6 @@
-pub mod timerboard;
+pub mod server;
 
-pub use timerboard::TimerboardAdmin;
+pub use server::ServerAdmin;
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
@@ -11,6 +11,7 @@ use crate::client::{
         Page,
     },
     model::error::ApiError,
+    router::Route,
 };
 use crate::model::{api::ErrorDto, discord::DiscordGuildDto};
 
@@ -141,7 +142,7 @@ pub fn Admin() -> Element {
                     class: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-6xl",
                     for guild in guild_list {
                         Link {
-                            to: "/admin/{guild.guild_id}",
+                            to: Route::ServerAdmin { guild_id: guild.guild_id as u64 },
                             class: "card bg-base-200 hover:bg-base-300 transition-colors",
                             div {
                                 class: "card-body",

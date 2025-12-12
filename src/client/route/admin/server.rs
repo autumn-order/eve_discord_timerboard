@@ -12,7 +12,7 @@ use crate::client::{
 use crate::model::discord::DiscordGuildDto;
 
 #[component]
-pub fn TimerboardAdmin(guild_id: u64) -> Element {
+pub fn ServerAdmin(guild_id: u64) -> Element {
     let mut guild = use_signal(|| None::<Result<DiscordGuildDto, ApiError>>);
     let mut fetched = use_signal(|| false);
 
@@ -38,7 +38,7 @@ pub fn TimerboardAdmin(guild_id: u64) -> Element {
     }
 
     rsx! {
-        Title { "Timerboard Admin | Black Rose Timerboard" }
+        Title { "Server Admin | Black Rose Timerboard" }
         if let Some(Ok(guild_data)) = guild() {
             Page {
                 class: "flex flex-col items-center w-full h-full",
