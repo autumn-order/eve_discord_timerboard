@@ -83,13 +83,14 @@ fn FleetCategoriesSection(guild_id: u64) -> Element {
     // Get page and per_page from cache
     let page = use_signal(|| cache.read().page);
     let per_page = use_signal(|| cache.read().per_page);
+    let refetch_trigger = use_signal(|| 0u32);
 
-    // Fetch fleet categories - resource automatically re-runs when page() or per_page() changes
+    // Fetch fleet categories - resource automatically re-runs when page(), per_page(), or refetch_trigger changes
     #[cfg(feature = "web")]
-    let future =
-        use_resource(
-            move || async move { get_fleet_categories(guild_id, page(), per_page()).await },
-        );
+    let future = use_resource(move || async move {
+        let _ = refetch_trigger();
+        get_fleet_categories(guild_id, page(), per_page()).await
+    });
 
     #[cfg(feature = "web")]
     use_effect(move || {
@@ -138,7 +139,12 @@ fn FleetCategoriesSection(guild_id: u64) -> Element {
                             "No fleet categories configured"
                         }
                     } else {
-                        FleetCategoriesTable { data: data.clone() }
+                        FleetCategoriesTable {
+                            data: data.clone(),
+                            guild_id,
+                            cache,
+                            refetch_trigger
+                        }
                         Pagination {
                             page,
                             per_page,
@@ -162,7 +168,8 @@ fn FleetCategoriesSection(guild_id: u64) -> Element {
                 CreateCategoryModal {
                     guild_id,
                     show: show_create_modal,
-                    cache
+                    cache,
+                    refetch_trigger
                 }
             }
         }
@@ -174,6 +181,7 @@ fn CreateCategoryModal(
     guild_id: u64,
     mut show: Signal<bool>,
     mut cache: Signal<FleetCategoriesCache>,
+    mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut category_name = use_signal(|| String::new());
     let mut submit_name = use_signal(|| String::new());
@@ -205,8 +213,8 @@ fn CreateCategoryModal(
         if let Some(Some(result)) = future.read_unchecked().as_ref() {
             match result {
                 Ok(_) => {
-                    // Clear cache to force refetch
-                    cache.write().data = None;
+                    // Trigger refetch
+                    refetch_trigger.set(refetch_trigger() + 1);
                     // Close modal
                     show.set(false);
                     // Reset form
@@ -320,9 +328,52 @@ fn CreateCategoryModal(
 }
 
 #[component]
-fn FleetCategoriesTable(data: PaginatedFleetCategoriesDto) -> Element {
+fn FleetCategoriesTable(
+    data: PaginatedFleetCategoriesDto,
+    guild_id: u64,
+    mut cache: Signal<FleetCategoriesCache>,
+    mut refetch_trigger: Signal<u32>,
+) -> Element {
     let mut sorted_categories = data.categories.clone();
     sorted_categories.sort_by_key(|c| c.id);
+
+    let mut show_delete_modal = use_signal(|| false);
+    let mut category_to_delete = use_signal(|| None::<(i32, String)>);
+    let mut is_deleting = use_signal(|| false);
+
+    // Handle deletion with use_resource
+    #[cfg(feature = "web")]
+    let delete_future = use_resource(move || async move {
+        if is_deleting() {
+            if let Some((id, _)) = category_to_delete() {
+                Some(delete_fleet_category(guild_id, id).await)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = delete_future.read_unchecked().as_ref() {
+            match result {
+                Ok(_) => {
+                    // Trigger refetch
+                    refetch_trigger.set(refetch_trigger() + 1);
+                    // Close modal
+                    show_delete_modal.set(false);
+                    category_to_delete.set(None);
+                    is_deleting.set(false);
+                }
+                Err(err) => {
+                    tracing::error!("Failed to delete category: {}", err);
+                    is_deleting.set(false);
+                }
+            }
+        }
+    });
 
     rsx!(
         div {
@@ -343,27 +394,93 @@ fn FleetCategoriesTable(data: PaginatedFleetCategoriesDto) -> Element {
                 }
                 tbody {
                     for category in &sorted_categories {
-                        tr {
-                            td { "{category.name}" }
-                            td { class: "text-center", "0" }
-                            td { class: "text-center", "0" }
-                            td { class: "text-center", "0" }
-                            td {
-                                div {
-                                    class: "flex gap-2 justify-end",
-                                    button {
-                                        class: "btn btn-sm btn-primary",
-                                        "Edit"
-                                    }
-                                    button {
-                                        class: "btn btn-sm btn-error",
-                                        "Delete"
+                        {
+                            let category_id = category.id;
+                            let category_name = category.name.clone();
+                            rsx! {
+                                tr {
+                                    td { "{category.name}" }
+                                    td { class: "text-center", "0" }
+                                    td { class: "text-center", "0" }
+                                    td { class: "text-center", "0" }
+                                    td {
+                                        div {
+                                            class: "flex gap-2 justify-end",
+                                            button {
+                                                class: "btn btn-sm btn-primary",
+                                                "Edit"
+                                            }
+                                            button {
+                                                class: "btn btn-sm btn-error",
+                                                onclick: move |_| {
+                                                    category_to_delete.set(Some((category_id, category_name.clone())));
+                                                    show_delete_modal.set(true);
+                                                },
+                                                "Delete"
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // Delete Confirmation Modal
+        div {
+            class: if show_delete_modal() { "modal modal-open" } else { "modal" },
+            div {
+                class: "modal-box",
+                h3 {
+                    class: "font-bold text-lg mb-4",
+                    "Delete Fleet Category"
+                }
+                if let Some((_, name)) = category_to_delete() {
+                    p {
+                        class: "py-4",
+                        "Are you sure you want to delete the category "
+                        span { class: "font-bold", "\"{name}\"" }
+                        "? This action cannot be undone."
+                    }
+                }
+                div {
+                    class: "modal-action",
+                    button {
+                        r#type: "button",
+                        class: "btn",
+                        onclick: move |_| {
+                            show_delete_modal.set(false);
+                            category_to_delete.set(None);
+                        },
+                        disabled: is_deleting(),
+                        "Cancel"
+                    }
+                    button {
+                        r#type: "button",
+                        class: "btn btn-error",
+                        onclick: move |_| {
+                            is_deleting.set(true);
+                        },
+                        disabled: is_deleting(),
+                        if is_deleting() {
+                            span { class: "loading loading-spinner loading-sm mr-2" }
+                            "Deleting..."
+                        } else {
+                            "Delete"
+                        }
+                    }
+                }
+            }
+            div {
+                class: "modal-backdrop",
+                onclick: move |_| {
+                    if !is_deleting() {
+                        show_delete_modal.set(false);
+                        category_to_delete.set(None);
+                    }
+                },
             }
         }
     )
@@ -594,6 +711,41 @@ async fn create_fleet_category(guild_id: u64, name: String) -> Result<(), ApiErr
 
     match status {
         201 => Ok(()),
+        _ => {
+            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
+                error_dto.error
+            } else {
+                response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string())
+            };
+
+            Err(ApiError { status, message })
+        }
+    }
+}
+
+#[cfg(feature = "web")]
+async fn delete_fleet_category(guild_id: u64, fleet_id: i32) -> Result<(), ApiError> {
+    use crate::model::api::ErrorDto;
+    use reqwasm::http::Request;
+
+    let url = format!("/api/timerboard/{}/fleet/category/{}", guild_id, fleet_id);
+
+    let response = Request::delete(&url)
+        .credentials(reqwasm::http::RequestCredentials::Include)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            status: 500,
+            message: format!("Failed to send request: {}", e),
+        })?;
+
+    let status = response.status() as u64;
+
+    match status {
+        204 => Ok(()),
         _ => {
             let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
                 error_dto.error
