@@ -71,7 +71,9 @@ impl<'a> AuthService<'a> {
             .map_err(AuthError::from)?;
 
         let user = self.fetch_discord_user(&token).await?;
-        let new_user = user_repo.upsert(user, set_admin).await?;
+        // Only update admin status if set_admin is true, otherwise preserve existing status
+        let admin_update = if set_admin { Some(true) } else { None };
+        let new_user = user_repo.upsert(user, admin_update).await?;
 
         if set_admin {
             tracing::info!("User {} has been set as admin", new_user.name)

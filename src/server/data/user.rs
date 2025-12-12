@@ -17,19 +17,27 @@ impl<'a> UserRepository<'a> {
     pub async fn upsert(
         &self,
         user: DiscordUser,
-        is_admin: bool,
+        is_admin: Option<bool>,
     ) -> Result<entity::user::Model, DbErr> {
+        // Build list of columns to update on conflict
+        let mut update_columns = vec![entity::user::Column::Name];
+
+        // Only update admin column if is_admin is Some
+        if is_admin.is_some() {
+            update_columns.push(entity::user::Column::Admin);
+        }
+
         entity::prelude::User::insert(entity::user::ActiveModel {
             discord_id: ActiveValue::Set(user.id.get() as i64),
             name: ActiveValue::Set(user.name),
-            admin: ActiveValue::Set(is_admin),
+            admin: ActiveValue::Set(is_admin.unwrap_or(false)),
             ..Default::default()
         })
         // Update user name in case it may have changed since last login
+        // Only update admin if is_admin is Some to prevent resetting admin status
         .on_conflict(
             OnConflict::column(entity::user::Column::DiscordId)
-                .update_columns([entity::user::Column::Name])
-                .update_columns([entity::user::Column::Admin])
+                .update_columns(update_columns)
                 .to_owned(),
         )
         .exec_with_returning(self.db)
