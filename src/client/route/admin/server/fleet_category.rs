@@ -364,7 +364,6 @@ fn FleetCategoriesTable(
                     refetch_trigger.set(refetch_trigger() + 1);
                     // Close modal
                     show_delete_modal.set(false);
-                    category_to_delete.set(None);
                     is_deleting.set(false);
                 }
                 Err(err) => {
@@ -452,7 +451,6 @@ fn FleetCategoriesTable(
                         class: "btn",
                         onclick: move |_| {
                             show_delete_modal.set(false);
-                            category_to_delete.set(None);
                         },
                         disabled: is_deleting(),
                         "Cancel"
@@ -478,7 +476,6 @@ fn FleetCategoriesTable(
                 onclick: move |_| {
                     if !is_deleting() {
                         show_delete_modal.set(false);
-                        category_to_delete.set(None);
                     }
                 },
             }
