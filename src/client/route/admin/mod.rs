@@ -19,7 +19,7 @@ use crate::model::{api::ErrorDto, discord::DiscordGuildDto};
 pub async fn get_all_discord_guilds() -> Result<Vec<DiscordGuildDto>, ApiError> {
     use reqwasm::http::Request;
 
-    let response = Request::get("/api/admin/discord/guilds")
+    let response = Request::get("/api/admin/guilds")
         .credentials(reqwasm::http::RequestCredentials::Include)
         .send()
         .await
@@ -60,7 +60,7 @@ pub async fn get_all_discord_guilds() -> Result<Vec<DiscordGuildDto>, ApiError> 
 pub async fn get_discord_guild_by_id(guild_id: u64) -> Result<DiscordGuildDto, ApiError> {
     use reqwasm::http::Request;
 
-    let response = Request::get(&format!("/api/admin/discord/guilds/{}", guild_id))
+    let response = Request::get(&format!("/api/admin/guild/{}", guild_id))
         .credentials(reqwasm::http::RequestCredentials::Include)
         .send()
         .await

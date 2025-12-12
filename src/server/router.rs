@@ -23,11 +23,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/logout", get(logout))
         .route("/api/auth/user", get(get_user))
         .route("/api/admin/bot/add", get(add_bot))
-        .route("/api/admin/discord/guilds", get(get_all_discord_guilds))
-        .route(
-            "/api/admin/discord/guilds/{guild_id}",
-            get(get_discord_guild_by_id),
-        )
+        .route("/api/admin/guilds", get(get_all_discord_guilds))
+        .route("/api/admin/guild/{guild_id}", get(get_discord_guild_by_id))
         .route(
             "/api/timerboard/{guild_id}/fleet/category",
             post(create_fleet_category).get(get_fleet_categories),
