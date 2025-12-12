@@ -1,2 +1,3 @@
-pub mod user;
 pub mod discord;
+pub mod fleet;
+pub mod user;
