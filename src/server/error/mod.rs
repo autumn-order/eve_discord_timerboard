@@ -32,8 +32,6 @@ pub enum AppError {
     DiscordErr(#[from] serenity::Error),
     #[error("{0}")]
     NotFound(String),
-    #[error("{0}")]
-    BadRequest(String),
 }
 
 impl IntoResponse for AppError {
@@ -42,9 +40,6 @@ impl IntoResponse for AppError {
             Self::AuthErr(err) => err.into_response(),
             Self::NotFound(msg) => {
                 (StatusCode::NOT_FOUND, Json(ErrorDto { error: msg })).into_response()
-            }
-            Self::BadRequest(msg) => {
-                (StatusCode::BAD_REQUEST, Json(ErrorDto { error: msg })).into_response()
             }
             err => InternalServerError(err).into_response(),
         }

@@ -1,3 +1,4 @@
+use chrono::Duration;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
     PaginatorTrait, QueryFilter, QueryOrder,
@@ -17,10 +18,16 @@ impl<'a> FleetCategoryRepository<'a> {
         &self,
         guild_id: i64,
         name: String,
+        ping_lead_time: Option<Duration>,
+        ping_reminder: Option<Duration>,
+        max_pre_ping: Option<Duration>,
     ) -> Result<entity::fleet_category::Model, DbErr> {
         entity::fleet_category::ActiveModel {
             guild_id: ActiveValue::Set(guild_id),
             name: ActiveValue::Set(name),
+            ping_cooldown: ActiveValue::Set(ping_lead_time.map(|d| d.num_seconds() as i32)),
+            ping_reminder: ActiveValue::Set(ping_reminder.map(|d| d.num_seconds() as i32)),
+            max_pre_ping: ActiveValue::Set(max_pre_ping.map(|d| d.num_seconds() as i32)),
             ..Default::default()
         }
         .insert(self.db)
@@ -52,11 +59,14 @@ impl<'a> FleetCategoryRepository<'a> {
         Ok((categories, total))
     }
 
-    /// Updates a fleet category's name
+    /// Updates a fleet category's name and duration fields
     pub async fn update(
         &self,
         id: i32,
         name: String,
+        ping_lead_time: Option<Duration>,
+        ping_reminder: Option<Duration>,
+        max_pre_ping: Option<Duration>,
     ) -> Result<entity::fleet_category::Model, DbErr> {
         let category = entity::prelude::FleetCategory::find_by_id(id)
             .one(self.db)
@@ -68,6 +78,11 @@ impl<'a> FleetCategoryRepository<'a> {
 
         let mut active_model: entity::fleet_category::ActiveModel = category.into();
         active_model.name = ActiveValue::Set(name);
+        active_model.ping_cooldown =
+            ActiveValue::Set(ping_lead_time.map(|d| d.num_seconds() as i32));
+        active_model.ping_reminder =
+            ActiveValue::Set(ping_reminder.map(|d| d.num_seconds() as i32));
+        active_model.max_pre_ping = ActiveValue::Set(max_pre_ping.map(|d| d.num_seconds() as i32));
 
         active_model.update(self.db).await
     }

@@ -43,7 +43,15 @@ pub async fn create_fleet_category(
 
     let service = FleetCategoryService::new(&state.db);
 
-    let category = service.create(guild_id, payload.name).await?;
+    let category = service
+        .create(
+            guild_id,
+            payload.name,
+            payload.ping_lead_time,
+            payload.ping_reminder,
+            payload.max_pre_ping,
+        )
+        .await?;
 
     Ok((StatusCode::CREATED, Json(category)))
 }
@@ -83,7 +91,16 @@ pub async fn update_fleet_category(
 
     let service = FleetCategoryService::new(&state.db);
 
-    let category = service.update(fleet_id, guild_id, payload.name).await?;
+    let category = service
+        .update(
+            fleet_id,
+            guild_id,
+            payload.name,
+            payload.ping_lead_time,
+            payload.ping_reminder,
+            payload.max_pre_ping,
+        )
+        .await?;
 
     match category {
         Some(cat) => Ok((StatusCode::OK, Json(cat))),
@@ -93,6 +110,9 @@ pub async fn update_fleet_category(
                 id: 0,
                 guild_id: 0,
                 name: String::new(),
+                ping_lead_time: None,
+                ping_reminder: None,
+                max_pre_ping: None,
             }),
         )),
     }

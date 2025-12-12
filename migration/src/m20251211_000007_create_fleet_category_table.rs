@@ -16,6 +16,9 @@ impl MigrationTrait for Migration {
                     .col(pk_auto(FleetCategory::Id))
                     .col(big_unsigned(FleetCategory::GuildId))
                     .col(string(FleetCategory::Name))
+                    .col(integer_null(FleetCategory::PingCooldown))
+                    .col(integer_null(FleetCategory::PingReminder))
+                    .col(integer_null(FleetCategory::MaxPrePing))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_fleet_category_guild_id")
@@ -42,4 +45,7 @@ pub enum FleetCategory {
     Id,
     GuildId,
     Name,
+    PingCooldown,
+    PingReminder,
+    MaxPrePing,
 }

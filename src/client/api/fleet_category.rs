@@ -1,3 +1,5 @@
+use chrono::Duration;
+
 use crate::{
     client::model::error::ApiError,
     model::fleet::{CreateFleetCategoryDto, PaginatedFleetCategoriesDto, UpdateFleetCategoryDto},
@@ -23,9 +25,20 @@ pub async fn get_fleet_categories(
 }
 
 /// Create a new fleet category
-pub async fn create_fleet_category(guild_id: u64, name: String) -> Result<(), ApiError> {
+pub async fn create_fleet_category(
+    guild_id: u64,
+    name: String,
+    ping_cooldown: Option<Duration>,
+    ping_reminder: Option<Duration>,
+    max_pre_ping: Option<Duration>,
+) -> Result<(), ApiError> {
     let url = format!("/api/timerboard/{}/fleet/category", guild_id);
-    let payload = CreateFleetCategoryDto { name };
+    let payload = CreateFleetCategoryDto {
+        name,
+        ping_lead_time: ping_cooldown,
+        ping_reminder,
+        max_pre_ping,
+    };
     let body = serialize_json(&payload)?;
 
     let response = send_request(post(&url).body(body)).await?;
@@ -37,12 +50,20 @@ pub async fn update_fleet_category(
     guild_id: u64,
     category_id: i32,
     name: String,
+    ping_cooldown: Option<Duration>,
+    ping_reminder: Option<Duration>,
+    max_pre_ping: Option<Duration>,
 ) -> Result<(), ApiError> {
     let url = format!(
         "/api/timerboard/{}/fleet/category/{}",
         guild_id, category_id
     );
-    let payload = UpdateFleetCategoryDto { name };
+    let payload = UpdateFleetCategoryDto {
+        name,
+        ping_lead_time: ping_cooldown,
+        ping_reminder,
+        max_pre_ping,
+    };
     let body = serialize_json(&payload)?;
 
     let response = send_request(put(&url).body(body)).await?;

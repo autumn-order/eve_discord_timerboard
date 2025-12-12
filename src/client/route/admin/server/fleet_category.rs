@@ -1,3 +1,4 @@
+use chrono::Duration;
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
@@ -174,7 +175,6 @@ fn FleetCategoriesSection(guild_id: u64) -> Element {
                 CreateCategoryModal {
                     guild_id,
                     show: show_create_modal,
-                    cache,
                     refetch_trigger
                 }
             }
@@ -182,15 +182,75 @@ fn FleetCategoriesSection(guild_id: u64) -> Element {
     )
 }
 
+/// Helper to format duration to string like "1h", "30m", "1h30m"
+fn format_duration(d: &Duration) -> String {
+    let total_seconds = d.num_seconds();
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+
+    if hours > 0 && minutes > 0 {
+        format!("{}h{}m", hours, minutes)
+    } else if hours > 0 {
+        format!("{}h", hours)
+    } else if minutes > 0 {
+        format!("{}m", minutes)
+    } else {
+        format!("{}s", total_seconds)
+    }
+}
+
+/// Helper to parse duration string like "1h", "30m", "2h30m"
+fn parse_duration(s: &str) -> Option<Duration> {
+    if s.trim().is_empty() {
+        return None;
+    }
+
+    let s = s.trim().to_lowercase();
+    let mut total_seconds = 0i64;
+    let mut current_num = String::new();
+
+    for ch in s.chars() {
+        if ch.is_ascii_digit() {
+            current_num.push(ch);
+        } else if ch == 'h' {
+            if let Ok(hours) = current_num.parse::<i64>() {
+                total_seconds += hours * 3600;
+                current_num.clear();
+            }
+        } else if ch == 'm' {
+            if let Ok(minutes) = current_num.parse::<i64>() {
+                total_seconds += minutes * 60;
+                current_num.clear();
+            }
+        } else if ch == 's' {
+            if let Ok(seconds) = current_num.parse::<i64>() {
+                total_seconds += seconds;
+                current_num.clear();
+            }
+        }
+    }
+
+    if total_seconds > 0 {
+        Some(Duration::seconds(total_seconds))
+    } else {
+        None
+    }
+}
+
 #[component]
 fn CreateCategoryModal(
     guild_id: u64,
     mut show: Signal<bool>,
-    mut cache: Signal<FleetCategoriesCache>,
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut category_name = use_signal(|| String::new());
+    let mut ping_cooldown_str = use_signal(|| String::new());
+    let mut ping_reminder_str = use_signal(|| String::new());
+    let mut max_pre_ping_str = use_signal(|| String::new());
     let mut submit_name = use_signal(|| String::new());
+    let mut submit_ping_cooldown = use_signal(|| None::<Duration>);
+    let mut submit_ping_reminder = use_signal(|| None::<Duration>);
+    let mut submit_max_pre_ping = use_signal(|| None::<Duration>);
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -198,7 +258,13 @@ fn CreateCategoryModal(
     use_effect(move || {
         if show() {
             category_name.set(String::new());
+            ping_cooldown_str.set(String::new());
+            ping_reminder_str.set(String::new());
+            max_pre_ping_str.set(String::new());
             submit_name.set(String::new());
+            submit_ping_cooldown.set(None);
+            submit_ping_reminder.set(None);
+            submit_max_pre_ping.set(None);
             should_submit.set(false);
             error.set(None);
         }
@@ -208,7 +274,16 @@ fn CreateCategoryModal(
     #[cfg(feature = "web")]
     let future = use_resource(move || async move {
         if should_submit() {
-            Some(create_fleet_category(guild_id, submit_name()).await)
+            Some(
+                create_fleet_category(
+                    guild_id,
+                    submit_name(),
+                    submit_ping_cooldown(),
+                    submit_ping_reminder(),
+                    submit_max_pre_ping(),
+                )
+                .await,
+            )
         } else {
             None
         }
@@ -245,6 +320,9 @@ fn CreateCategoryModal(
 
         error.set(None);
         submit_name.set(name);
+        submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
+        submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
+        submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
         should_submit.set(true);
     };
 
@@ -256,11 +334,12 @@ fn CreateCategoryModal(
             title: "Create Fleet Category".to_string(),
             prevent_close: is_submitting,
             form {
+                class: "flex flex-col gap-4",
                 onsubmit: on_submit,
 
                 // Category Name Input
                 div {
-                    class: "form-control w-full flex flex-col gap-3",
+                    class: "form-control w-full flex flex-col gap-2",
                     label {
                         class: "label",
                         span {
@@ -276,6 +355,99 @@ fn CreateCategoryModal(
                         oninput: move |evt| category_name.set(evt.value()),
                         disabled: is_submitting,
                         required: true,
+                    }
+                }
+
+                // Ping Cooldown Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Ping Cooldown (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 1h, 30m, 1h30m",
+                        value: "{ping_cooldown_str()}",
+                        oninput: move |evt| ping_cooldown_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Minimum amount of time between fleets"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
+                    }
+                }
+
+                // Ping Reminder Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Ping Reminder (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 15m, 30m",
+                        value: "{ping_reminder_str()}",
+                        oninput: move |evt| ping_reminder_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Reminder ping before fleet starts"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
+                    }
+                }
+
+                // Max Pre-Ping Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Max Pre-Ping (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 2h, 3h",
+                        value: "{max_pre_ping_str()}",
+                        oninput: move |evt| max_pre_ping_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Maximum advance notice for pings"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
                     }
                 }
 
@@ -329,7 +501,7 @@ fn FleetCategoriesTable(
     let mut is_deleting = use_signal(|| false);
 
     let mut show_edit_modal = use_signal(|| false);
-    let mut category_to_edit = use_signal(|| None::<(i32, String)>);
+    let mut category_to_edit = use_signal(|| None::<crate::model::fleet::FleetCategoryDto>);
 
     // Handle deletion with use_resource
     #[cfg(feature = "web")]
@@ -386,7 +558,7 @@ fn FleetCategoriesTable(
                         {
                             let category_id = category.id;
                             let category_name = category.name.clone();
-                            let category_name_for_edit = category_name.clone();
+                            let category_clone_for_edit = category.clone();
                             let category_name_for_delete = category_name.clone();
                             rsx! {
                                 tr {
@@ -400,7 +572,7 @@ fn FleetCategoriesTable(
                                             button {
                                                 class: "btn btn-sm btn-primary",
                                                 onclick: move |_| {
-                                                    category_to_edit.set(Some((category_id, category_name_for_edit.clone())));
+                                                    category_to_edit.set(Some(category_clone_for_edit.clone()));
                                                     show_edit_modal.set(true);
                                                 },
                                                 "Edit"
@@ -460,11 +632,17 @@ fn FleetCategoriesTable(
 fn EditCategoryModal(
     guild_id: u64,
     mut show: Signal<bool>,
-    category_to_edit: Signal<Option<(i32, String)>>,
+    category_to_edit: Signal<Option<crate::model::fleet::FleetCategoryDto>>,
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut category_name = use_signal(|| String::new());
+    let mut ping_cooldown_str = use_signal(|| String::new());
+    let mut ping_reminder_str = use_signal(|| String::new());
+    let mut max_pre_ping_str = use_signal(|| String::new());
     let mut submit_name = use_signal(|| String::new());
+    let mut submit_ping_cooldown = use_signal(|| None::<Duration>);
+    let mut submit_ping_reminder = use_signal(|| None::<Duration>);
+    let mut submit_max_pre_ping = use_signal(|| None::<Duration>);
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut category_id = use_signal(|| 0i32);
@@ -472,9 +650,30 @@ fn EditCategoryModal(
     // Initialize form when modal opens with new data
     use_effect(move || {
         if show() {
-            if let Some((id, name)) = category_to_edit() {
-                category_name.set(name.clone());
-                category_id.set(id);
+            if let Some(category) = category_to_edit() {
+                category_name.set(category.name.clone());
+                category_id.set(category.id);
+                ping_cooldown_str.set(
+                    category
+                        .ping_lead_time
+                        .as_ref()
+                        .map(|d| format_duration(d))
+                        .unwrap_or_default(),
+                );
+                ping_reminder_str.set(
+                    category
+                        .ping_reminder
+                        .as_ref()
+                        .map(|d| format_duration(d))
+                        .unwrap_or_default(),
+                );
+                max_pre_ping_str.set(
+                    category
+                        .max_pre_ping
+                        .as_ref()
+                        .map(|d| format_duration(d))
+                        .unwrap_or_default(),
+                );
                 // Reset error and submit state when opening with new data
                 error.set(None);
                 should_submit.set(false);
@@ -486,7 +685,17 @@ fn EditCategoryModal(
     #[cfg(feature = "web")]
     let future = use_resource(move || async move {
         if should_submit() {
-            Some(update_fleet_category(guild_id, category_id(), submit_name()).await)
+            Some(
+                update_fleet_category(
+                    guild_id,
+                    category_id(),
+                    submit_name(),
+                    submit_ping_cooldown(),
+                    submit_ping_reminder(),
+                    submit_max_pre_ping(),
+                )
+                .await,
+            )
         } else {
             None
         }
@@ -523,6 +732,9 @@ fn EditCategoryModal(
 
         error.set(None);
         submit_name.set(name);
+        submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
+        submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
+        submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
         should_submit.set(true);
     };
 
@@ -534,11 +746,12 @@ fn EditCategoryModal(
             title: "Edit Fleet Category".to_string(),
             prevent_close: is_submitting,
             form {
+                class: "flex flex-col gap-4",
                 onsubmit: on_submit,
 
                 // Category Name Input
                 div {
-                    class: "form-control w-full flex flex-col gap-3",
+                    class: "form-control w-full flex flex-col gap-2",
                     label {
                         class: "label",
                         span {
@@ -554,6 +767,99 @@ fn EditCategoryModal(
                         oninput: move |evt| category_name.set(evt.value()),
                         disabled: is_submitting,
                         required: true,
+                    }
+                }
+
+                // Ping Cooldown Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Ping Cooldown (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 1h, 30m, 1h30m",
+                        value: "{ping_cooldown_str()}",
+                        oninput: move |evt| ping_cooldown_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Minimum amount of time between fleets"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
+                    }
+                }
+
+                // Ping Reminder Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Ping Reminder (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 15m, 30m",
+                        value: "{ping_reminder_str()}",
+                        oninput: move |evt| ping_reminder_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Reminder ping before fleet starts"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
+                    }
+                }
+
+                // Max Pre-Ping Input
+                div {
+                    class: "form-control w-full flex flex-col gap-2",
+                    label {
+                        class: "label",
+                        span {
+                            class: "label-text",
+                            "Max Pre-Ping (optional)"
+                        }
+                    }
+                    input {
+                        r#type: "text",
+                        class: "input input-bordered w-full",
+                        placeholder: "e.g., 2h, 3h",
+                        value: "{max_pre_ping_str()}",
+                        oninput: move |evt| max_pre_ping_str.set(evt.value()),
+                        disabled: is_submitting,
+                    }
+                    label {
+                        class: "label flex-col items-start gap-1",
+                        span {
+                            class: "label-text-alt",
+                            "Maximum advance notice for pings"
+                        }
+                        span {
+                            class: "label-text-alt text-xs",
+                            "Format: 1h = 1 hour, 30m = 30 minutes, 1h30m = 1.5 hours"
+                        }
                     }
                 }
 

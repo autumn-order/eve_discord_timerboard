@@ -1,3 +1,4 @@
+use chrono::Duration;
 use sea_orm::DatabaseConnection;
 
 use crate::{
@@ -15,15 +16,27 @@ impl<'a> FleetCategoryService<'a> {
     }
 
     /// Creates a new fleet category for a guild
-    pub async fn create(&self, guild_id: i64, name: String) -> Result<FleetCategoryDto, AppError> {
+    pub async fn create(
+        &self,
+        guild_id: i64,
+        name: String,
+        ping_lead_time: Option<Duration>,
+        ping_reminder: Option<Duration>,
+        max_pre_ping: Option<Duration>,
+    ) -> Result<FleetCategoryDto, AppError> {
         let repo = FleetCategoryRepository::new(self.db);
 
-        let category = repo.create(guild_id, name).await?;
+        let category = repo
+            .create(guild_id, name, ping_lead_time, ping_reminder, max_pre_ping)
+            .await?;
 
         Ok(FleetCategoryDto {
             id: category.id,
             guild_id: category.guild_id,
             name: category.name,
+            ping_lead_time: category.ping_cooldown.map(|s| Duration::seconds(s as i64)),
+            ping_reminder: category.ping_reminder.map(|s| Duration::seconds(s as i64)),
+            max_pre_ping: category.max_pre_ping.map(|s| Duration::seconds(s as i64)),
         })
     }
 
@@ -53,6 +66,9 @@ impl<'a> FleetCategoryService<'a> {
                     id: c.id,
                     guild_id: c.guild_id,
                     name: c.name,
+                    ping_lead_time: c.ping_cooldown.map(|s| Duration::seconds(s as i64)),
+                    ping_reminder: c.ping_reminder.map(|s| Duration::seconds(s as i64)),
+                    max_pre_ping: c.max_pre_ping.map(|s| Duration::seconds(s as i64)),
                 })
                 .collect(),
             total,
@@ -62,13 +78,16 @@ impl<'a> FleetCategoryService<'a> {
         })
     }
 
-    /// Updates a fleet category's name
+    /// Updates a fleet category's name and duration fields
     /// Returns None if the category doesn't exist or doesn't belong to the guild
     pub async fn update(
         &self,
         id: i32,
         guild_id: i64,
         name: String,
+        ping_lead_time: Option<Duration>,
+        ping_reminder: Option<Duration>,
+        max_pre_ping: Option<Duration>,
     ) -> Result<Option<FleetCategoryDto>, AppError> {
         let repo = FleetCategoryRepository::new(self.db);
 
@@ -77,12 +96,17 @@ impl<'a> FleetCategoryService<'a> {
             return Ok(None);
         }
 
-        let category = repo.update(id, name).await?;
+        let category = repo
+            .update(id, name, ping_lead_time, ping_reminder, max_pre_ping)
+            .await?;
 
         Ok(Some(FleetCategoryDto {
             id: category.id,
             guild_id: category.guild_id,
             name: category.name,
+            ping_lead_time: category.ping_cooldown.map(|s| Duration::seconds(s as i64)),
+            ping_reminder: category.ping_reminder.map(|s| Duration::seconds(s as i64)),
+            max_pre_ping: category.max_pre_ping.map(|s| Duration::seconds(s as i64)),
         }))
     }
 
