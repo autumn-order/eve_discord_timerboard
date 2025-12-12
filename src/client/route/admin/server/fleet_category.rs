@@ -376,6 +376,9 @@ fn Pagination(
     pagination_data: PaginatedFleetCategoriesDto,
     mut cache: Signal<FleetCategoriesCache>,
 ) -> Element {
+    let mut show_page_jump = use_signal(|| false);
+    let mut jump_page_input = use_signal(|| String::new());
+
     rsx!(
         div {
             class: "flex justify-between items-center mt-4",
@@ -427,6 +430,10 @@ fn Pagination(
                     }
                     button {
                         class: "join-item btn btn-sm",
+                        onclick: move |_| {
+                            jump_page_input.set((pagination_data.page + 1).to_string());
+                            show_page_jump.set(true);
+                        },
                         "Page {pagination_data.page + 1} of {pagination_data.total_pages}"
                     }
                     button {
@@ -442,6 +449,68 @@ fn Pagination(
                         "»"
                     }
                 }
+            }
+        }
+
+        // Page Jump Modal
+        div {
+            class: if show_page_jump() { "modal modal-open" } else { "modal" },
+            div {
+                class: "modal-box",
+                h3 {
+                    class: "font-bold text-lg mb-4",
+                    "Jump to Page"
+                }
+                form {
+                    onsubmit: move |evt| {
+                        evt.prevent_default();
+                        if let Ok(target_page) = jump_page_input().parse::<u64>() {
+                            if target_page > 0 && target_page <= pagination_data.total_pages {
+                                let new_page = target_page - 1; // Convert to 0-indexed
+                                page.set(new_page);
+                                cache.write().page = new_page;
+                                show_page_jump.set(false);
+                            }
+                        }
+                    },
+                    div {
+                        class: "form-control w-full flex flex-col gap-3",
+                        label {
+                            class: "label",
+                            span {
+                                class: "label-text",
+                                "Page number (1-{pagination_data.total_pages})"
+                            }
+                        }
+                        input {
+                            r#type: "number",
+                            class: "input input-bordered w-full",
+                            min: "1",
+                            max: "{pagination_data.total_pages}",
+                            value: "{jump_page_input()}",
+                            oninput: move |evt| jump_page_input.set(evt.value()),
+                            autofocus: true,
+                        }
+                    }
+                    div {
+                        class: "modal-action",
+                        button {
+                            r#type: "button",
+                            class: "btn",
+                            onclick: move |_| show_page_jump.set(false),
+                            "Cancel"
+                        }
+                        button {
+                            r#type: "submit",
+                            class: "btn btn-primary",
+                            "Jump"
+                        }
+                    }
+                }
+            }
+            div {
+                class: "modal-backdrop",
+                onclick: move |_| show_page_jump.set(false),
             }
         }
     )
