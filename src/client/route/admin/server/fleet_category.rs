@@ -1,18 +1,24 @@
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
-use crate::client::{
-    component::{
-        page::{ErrorPage, LoadingPage},
-        ConfirmationModal, Modal, Page, Pagination, PaginationData,
+use crate::{
+    client::{
+        component::{
+            page::{ErrorPage, LoadingPage},
+            ConfirmationModal, Modal, Page, Pagination, PaginationData,
+        },
+        model::error::ApiError,
+        route::admin::server::{ActionTabs, FleetCategoriesCache, GuildInfoHeader, ServerAdminTab},
+        router::Route,
     },
-    model::error::ApiError,
-    router::Route,
+    model::{discord::DiscordGuildDto, fleet::PaginatedFleetCategoriesDto},
 };
 
-use crate::model::{discord::DiscordGuildDto, fleet::PaginatedFleetCategoriesDto};
-
-use super::{ActionTabs, FleetCategoriesCache, GuildInfoHeader, ServerAdminTab};
+#[cfg(feature = "web")]
+use crate::client::api::{
+    discord_guild::get_discord_guild_by_id,
+    fleet_category::{create_fleet_category, delete_fleet_category, get_fleet_categories},
+};
 
 #[component]
 pub fn ServerAdminFleetCategory(guild_id: u64) -> Element {
@@ -22,8 +28,6 @@ pub fn ServerAdminFleetCategory(guild_id: u64) -> Element {
     // Fetch guild data using use_resource if not already cached
     #[cfg(feature = "web")]
     {
-        use crate::client::route::admin::get_discord_guild_by_id;
-
         // Only run resource if we need to fetch
         let needs_fetch = guild.read().as_ref().map(|g| g.guild_id as u64) != Some(guild_id);
 
@@ -462,132 +466,4 @@ fn FleetCategoryPagination(
             cache.write().page = 0;
         },
     })
-}
-
-#[cfg(feature = "web")]
-async fn get_fleet_categories(
-    guild_id: u64,
-    page: u64,
-    per_page: u64,
-) -> Result<PaginatedFleetCategoriesDto, ApiError> {
-    use crate::model::api::ErrorDto;
-    use reqwasm::http::Request;
-
-    let url = format!(
-        "/api/timerboard/{}/fleet/category?page={}&entries={}",
-        guild_id, page, per_page
-    );
-
-    let response = Request::get(&url)
-        .credentials(reqwasm::http::RequestCredentials::Include)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to send request: {}", e),
-        })?;
-
-    let status = response.status() as u64;
-
-    match status {
-        200 => {
-            let data = response
-                .json::<PaginatedFleetCategoriesDto>()
-                .await
-                .map_err(|e| ApiError {
-                    status: 500,
-                    message: format!("Failed to parse fleet categories: {}", e),
-                })?;
-            Ok(data)
-        }
-        _ => {
-            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-                error_dto.error
-            } else {
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string())
-            };
-
-            Err(ApiError { status, message })
-        }
-    }
-}
-
-#[cfg(feature = "web")]
-async fn create_fleet_category(guild_id: u64, name: String) -> Result<(), ApiError> {
-    use crate::model::{api::ErrorDto, fleet::CreateFleetCategoryDto};
-    use reqwasm::http::Request;
-
-    let url = format!("/api/timerboard/{}/fleet/category", guild_id);
-
-    let payload = CreateFleetCategoryDto { name };
-
-    let response = Request::post(&url)
-        .credentials(reqwasm::http::RequestCredentials::Include)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&payload).map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to serialize request: {}", e),
-        })?)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to send request: {}", e),
-        })?;
-
-    let status = response.status() as u64;
-
-    match status {
-        201 => Ok(()),
-        _ => {
-            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-                error_dto.error
-            } else {
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string())
-            };
-
-            Err(ApiError { status, message })
-        }
-    }
-}
-
-#[cfg(feature = "web")]
-async fn delete_fleet_category(guild_id: u64, fleet_id: i32) -> Result<(), ApiError> {
-    use crate::model::api::ErrorDto;
-    use reqwasm::http::Request;
-
-    let url = format!("/api/timerboard/{}/fleet/category/{}", guild_id, fleet_id);
-
-    let response = Request::delete(&url)
-        .credentials(reqwasm::http::RequestCredentials::Include)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to send request: {}", e),
-        })?;
-
-    let status = response.status() as u64;
-
-    match status {
-        204 => Ok(()),
-        _ => {
-            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-                error_dto.error
-            } else {
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string())
-            };
-
-            Err(ApiError { status, message })
-        }
-    }
 }

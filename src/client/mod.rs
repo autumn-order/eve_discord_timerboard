@@ -6,4 +6,7 @@ pub mod route;
 pub mod router;
 pub mod store;
 
+#[cfg(feature = "web")]
+pub mod api;
+
 pub use app::App;

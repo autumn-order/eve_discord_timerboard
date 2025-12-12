@@ -1,19 +1,24 @@
 pub mod fleet_category;
 
+pub use fleet_category::ServerAdminFleetCategory;
+
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
-use crate::client::{
-    component::{
-        page::{ErrorPage, LoadingPage},
-        Page,
+use crate::{
+    client::{
+        component::{
+            page::{ErrorPage, LoadingPage},
+            Page,
+        },
+        model::error::ApiError,
+        router::Route,
     },
-    model::error::ApiError,
-    router::Route,
+    model::{discord::DiscordGuildDto, fleet::PaginatedFleetCategoriesDto},
 };
-use crate::model::{discord::DiscordGuildDto, fleet::PaginatedFleetCategoriesDto};
 
-pub use fleet_category::ServerAdminFleetCategory;
+#[cfg(feature = "web")]
+use crate::client::api::discord_guild::get_discord_guild_by_id;
 
 /// Cached fleet categories data for a specific guild
 #[derive(Clone, PartialEq)]
@@ -63,8 +68,6 @@ pub fn ServerAdmin(guild_id: u64) -> Element {
     // Fetch guild data using use_resource if not already cached
     #[cfg(feature = "web")]
     {
-        use crate::client::route::admin::get_discord_guild_by_id;
-
         // Only run resource if we need to fetch
         let needs_fetch = guild.read().as_ref().map(|g| g.guild_id as u64) != Some(guild_id);
 

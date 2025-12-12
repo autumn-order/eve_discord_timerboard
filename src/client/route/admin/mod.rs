@@ -13,89 +13,10 @@ use crate::client::{
     model::error::ApiError,
     router::Route,
 };
-use crate::model::{api::ErrorDto, discord::DiscordGuildDto};
+use crate::model::discord::DiscordGuildDto;
 
 #[cfg(feature = "web")]
-pub async fn get_all_discord_guilds() -> Result<Vec<DiscordGuildDto>, ApiError> {
-    use reqwasm::http::Request;
-
-    let response = Request::get("/api/admin/guilds")
-        .credentials(reqwasm::http::RequestCredentials::Include)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to send request: {}", e),
-        })?;
-
-    let status = response.status() as u64;
-
-    match status {
-        200 => {
-            let guilds = response
-                .json::<Vec<DiscordGuildDto>>()
-                .await
-                .map_err(|e| ApiError {
-                    status: 500,
-                    message: format!("Failed to parse Discord guild data: {}", e),
-                })?;
-            Ok(guilds)
-        }
-        _ => {
-            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-                error_dto.error
-            } else {
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string())
-            };
-
-            Err(ApiError { status, message })
-        }
-    }
-}
-
-#[cfg(feature = "web")]
-pub async fn get_discord_guild_by_id(guild_id: u64) -> Result<DiscordGuildDto, ApiError> {
-    use reqwasm::http::Request;
-
-    let response = Request::get(&format!("/api/admin/guild/{}", guild_id))
-        .credentials(reqwasm::http::RequestCredentials::Include)
-        .send()
-        .await
-        .map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to send request: {}", e),
-        })?;
-
-    let status = response.status() as u64;
-
-    match status {
-        200 => {
-            let guild = response
-                .json::<DiscordGuildDto>()
-                .await
-                .map_err(|e| ApiError {
-                    status: 500,
-                    message: format!("Failed to parse Discord guild data: {}", e),
-                })?;
-            Ok(guild)
-        }
-        _ => {
-            let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-                error_dto.error
-            } else {
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string())
-            };
-
-            Err(ApiError { status, message })
-        }
-    }
-}
+use crate::client::api::discord_guild::get_all_discord_guilds;
 
 #[component]
 pub fn Admin() -> Element {
