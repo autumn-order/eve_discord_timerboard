@@ -35,7 +35,7 @@ pub fn App() -> Element {
         }
     }
 
-    // Make user_store available globally via context
+    // Make user store available globally via context
     use_context_provider(|| user_store);
 
     rsx! {

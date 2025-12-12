@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::client::component::{Layout, RequiresAdmin, RequiresLoggedIn};
 use crate::client::route::{
-    admin::{ServerAdmin, ServerAdminFleetCategory},
+    admin::{server::ServerAdminLayout, ServerAdmin, ServerAdminFleetCategory},
     Admin, Home, Login, NotFound,
 };
 
@@ -24,11 +24,13 @@ pub enum Route {
         #[route("/")]
         Admin {},
 
-        #[route("/server/:guild_id")]
-        ServerAdmin { guild_id: u64 },
+        #[layout(ServerAdminLayout)]
+            #[route("/server/:guild_id")]
+            ServerAdmin { guild_id: u64 },
 
-        #[route("/server/:guild_id/categories")]
-        ServerAdminFleetCategory { guild_id: u64 },
+            #[route("/server/:guild_id/categories")]
+            ServerAdminFleetCategory { guild_id: u64 },
+        #[end_layout]
     #[end_nest]
     #[end_layout]
 

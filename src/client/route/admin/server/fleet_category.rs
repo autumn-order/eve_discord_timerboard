@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use dioxus_logger::tracing;
 
 use crate::client::{
     component::{
@@ -8,38 +9,51 @@ use crate::client::{
     model::error::ApiError,
     router::Route,
 };
+
 use crate::model::discord::DiscordGuildDto;
 
 use super::{ActionTabs, GuildInfoHeader, ServerAdminTab};
 
 #[component]
 pub fn ServerAdminFleetCategory(guild_id: u64) -> Element {
-    let mut guild = use_signal(|| None::<Result<DiscordGuildDto, ApiError>>);
-    let mut fetched = use_signal(|| false);
+    let mut guild = use_context::<Signal<Option<DiscordGuildDto>>>();
+    let mut error = use_signal(|| None::<ApiError>);
 
-    // Fetch guild on first load
+    // Fetch guild data using use_resource if not already cached
     #[cfg(feature = "web")]
     {
         use crate::client::route::admin::get_discord_guild_by_id;
 
-        let future = use_resource(move || async move { get_discord_guild_by_id(guild_id).await });
+        let future = use_resource(move || async move {
+            // Only fetch if we don't have the guild data or if the guild_id doesn't match
+            if guild.read().as_ref().map(|g| g.guild_id as u64) != Some(guild_id) {
+                get_discord_guild_by_id(guild_id).await
+            } else {
+                // Return a dummy error to skip updating
+                Err(ApiError {
+                    status: 0,
+                    message: "cached".to_string(),
+                })
+            }
+        });
 
         match &*future.read_unchecked() {
             Some(Ok(guild_data)) => {
-                guild.set(Some(Ok(guild_data.clone())));
-                fetched.set(true);
+                guild.set(Some(guild_data.clone()));
+                error.set(None);
             }
-            Some(Err(err)) => {
-                guild.set(Some(Err(err.clone())));
-                fetched.set(true);
+            Some(Err(err)) if err.status != 0 => {
+                tracing::error!("Failed to fetch guild: {}", err);
+                guild.set(None);
+                error.set(Some(err.clone()));
             }
-            None => (),
+            _ => (),
         }
     }
 
     rsx! {
         Title { "Fleet Categories | Black Rose Timerboard" }
-        if let Some(Ok(guild_data)) = guild() {
+        if let Some(guild_data) = guild.read().clone() {
             Page {
                 class: "flex flex-col items-center w-full h-full",
                 div {
@@ -57,8 +71,8 @@ pub fn ServerAdminFleetCategory(guild_id: u64) -> Element {
                     }
                 }
             }
-        } else if let Some(Err(error)) = guild() {
-            ErrorPage { status: error.status, message: error.message }
+        } else if let Some(err) = error() {
+            ErrorPage { status: err.status, message: err.message }
         } else {
             LoadingPage { }
         }
