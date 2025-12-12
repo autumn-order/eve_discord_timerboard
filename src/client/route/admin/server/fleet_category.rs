@@ -188,6 +188,14 @@ fn CreateCategoryModal(
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
+    // Focus modal when it opens
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if show() {
+            document::eval(r#"document.querySelector('.modal-open')?.focus()"#);
+        }
+    });
+
     // Reset form when modal is closed
     use_effect(move || {
         if !show() {
@@ -251,6 +259,12 @@ fn CreateCategoryModal(
         // DaisyUI Modal
         div {
             class: if show() { "modal modal-open" } else { "modal" },
+            tabindex: "-1",
+            onkeydown: move |evt| {
+                if evt.key() == Key::Escape && !is_submitting {
+                    show.set(false);
+                }
+            },
             div {
                 class: "modal-box",
                 h3 {
@@ -341,6 +355,14 @@ fn FleetCategoriesTable(
     let mut category_to_delete = use_signal(|| None::<(i32, String)>);
     let mut is_deleting = use_signal(|| false);
 
+    // Focus modal when it opens
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if show_delete_modal() {
+            document::eval(r#"document.querySelector('.modal-open')?.focus()"#);
+        }
+    });
+
     // Handle deletion with use_resource
     #[cfg(feature = "web")]
     let delete_future = use_resource(move || async move {
@@ -430,6 +452,12 @@ fn FleetCategoriesTable(
         // Delete Confirmation Modal
         div {
             class: if show_delete_modal() { "modal modal-open" } else { "modal" },
+            tabindex: "-1",
+            onkeydown: move |evt| {
+                if evt.key() == Key::Escape && !is_deleting() {
+                    show_delete_modal.set(false);
+                }
+            },
             div {
                 class: "modal-box",
                 h3 {
