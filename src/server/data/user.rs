@@ -1,3 +1,4 @@
+use chrono::Utc;
 use migration::OnConflict;
 use sea_orm::{
     ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
@@ -76,5 +77,105 @@ impl<'a> UserRepository<'a> {
             .await?;
 
         Ok(admin_count > 0)
+    }
+
+    /// Updates the last guild sync timestamp to current time
+    ///
+    /// Sets the last_guild_sync_at column to the current UTC timestamp.
+    /// Used after successfully syncing a user's guild memberships.
+    ///
+    /// # Arguments
+    /// - `user_id`: Database ID of the user
+    ///
+    /// # Returns
+    /// - `Ok(())`: Timestamp updated successfully
+    /// - `Err(DbErr)`: Database error during update
+    pub async fn update_guild_sync_timestamp(&self, user_id: i32) -> Result<(), DbErr> {
+        entity::prelude::User::update_many()
+            .filter(entity::user::Column::Id.eq(user_id))
+            .col_expr(
+                entity::user::Column::LastGuildSyncAt,
+                sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
+            )
+            .exec(self.db)
+            .await?;
+        Ok(())
+    }
+
+    /// Updates the last role sync timestamp to current time
+    ///
+    /// Sets the last_role_sync_at column to the current UTC timestamp.
+    /// Used after successfully syncing a user's role memberships.
+    ///
+    /// # Arguments
+    /// - `user_id`: Database ID of the user
+    ///
+    /// # Returns
+    /// - `Ok(())`: Timestamp updated successfully
+    /// - `Err(DbErr)`: Database error during update
+    pub async fn update_role_sync_timestamp(&self, user_id: i32) -> Result<(), DbErr> {
+        entity::prelude::User::update_many()
+            .filter(entity::user::Column::Id.eq(user_id))
+            .col_expr(
+                entity::user::Column::LastRoleSyncAt,
+                sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
+            )
+            .exec(self.db)
+            .await?;
+        Ok(())
+    }
+
+    /// Updates the last guild sync timestamp for multiple users at once
+    ///
+    /// Sets the last_guild_sync_at column to the current UTC timestamp for all specified users.
+    /// Used after successfully syncing guild memberships for multiple users during bot startup.
+    ///
+    /// # Arguments
+    /// - `user_ids`: Slice of database IDs of users to update
+    ///
+    /// # Returns
+    /// - `Ok(())`: Timestamps updated successfully
+    /// - `Err(DbErr)`: Database error during update
+    pub async fn update_guild_sync_timestamps(&self, user_ids: &[i32]) -> Result<(), DbErr> {
+        if user_ids.is_empty() {
+            return Ok(());
+        }
+
+        entity::prelude::User::update_many()
+            .filter(entity::user::Column::Id.is_in(user_ids.iter().copied()))
+            .col_expr(
+                entity::user::Column::LastGuildSyncAt,
+                sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
+            )
+            .exec(self.db)
+            .await?;
+        Ok(())
+    }
+
+    /// Updates the last role sync timestamp for multiple users at once
+    ///
+    /// Sets the last_role_sync_at column to the current UTC timestamp for all specified users.
+    /// Used after successfully syncing role memberships for multiple users during bot startup.
+    ///
+    /// # Arguments
+    /// - `user_ids`: Slice of database IDs of users to update
+    ///
+    /// # Returns
+    /// - `Ok(())`: Timestamps updated successfully
+    /// - `Err(DbErr)`: Database error during update
+    pub async fn update_role_sync_timestamps(&self, user_ids: &[i32]) -> Result<(), DbErr> {
+        if user_ids.is_empty() {
+            return Ok(());
+        }
+
+        entity::prelude::User::update_many()
+            .filter(entity::user::Column::Id.is_in(user_ids.iter().copied()))
+            .col_expr(
+                entity::user::Column::LastRoleSyncAt,
+                sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
+            )
+            .exec(self.db)
+            .await?;
+        Ok(())
     }
 }

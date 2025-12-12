@@ -3,7 +3,10 @@ use sea_orm::DatabaseConnection;
 use serenity::all::GuildId;
 
 use crate::server::{
-    data::discord::{DiscordGuildRepository, UserDiscordGuildRepository},
+    data::{
+        discord::{DiscordGuildRepository, UserDiscordGuildRepository},
+        user::UserRepository,
+    },
     error::AppError,
 };
 
@@ -76,14 +79,15 @@ impl<'a> UserDiscordGuildService<'a> {
     /// Updates the database to reflect which logged-in users are currently members of the guild.
     /// Removes relationships for users no longer in the guild and adds relationships for new members.
     /// Only processes users who have logged into the application. Used during bot startup to catch
-    /// missed member join/leave events while the bot was offline.
+    /// missed member join/leave events while the bot was offline. Updates the last_guild_sync_at
+    /// timestamp for all synced users.
     ///
     /// # Arguments
     /// - `guild_id`: Discord's unique identifier for the guild (u64)
     /// - `member_discord_ids`: Slice of Discord user IDs currently in the guild
     ///
     /// # Returns
-    /// - `Ok(())`: Sync completed successfully
+    /// - `Ok(())`: Sync completed successfully and timestamps updated
     /// - `Err(AppError)`: Database error during user query, guild query, or relationship sync
     pub async fn sync_guild_members(
         &self,
@@ -137,6 +141,9 @@ impl<'a> UserDiscordGuildService<'a> {
         let logged_in_user_ids: std::collections::HashSet<i32> =
             logged_in_members.iter().map(|u| u.id).collect();
 
+        // Collect synced user IDs before moving logged_in_members
+        let synced_user_ids: Vec<i32> = logged_in_members.iter().map(|u| u.id).collect();
+
         // Remove relationships for users who are no longer in the guild
         for relationship in existing_relationships {
             if !logged_in_user_ids.contains(&relationship.user_id) {
@@ -154,6 +161,14 @@ impl<'a> UserDiscordGuildService<'a> {
         }
 
         tracing::info!("Synced members for guild {} ({})", guild.name, guild_id);
+
+        // Update last_guild_sync_at timestamps for all synced users
+        if !synced_user_ids.is_empty() {
+            let user_repo = UserRepository::new(self.db);
+            user_repo
+                .update_guild_sync_timestamps(&synced_user_ids)
+                .await?;
+        }
 
         Ok(())
     }

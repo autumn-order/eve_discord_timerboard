@@ -11,6 +11,8 @@ pub struct Model {
     pub discord_id: i64,
     pub name: String,
     pub admin: bool,
+    pub last_guild_sync_at: DateTime,
+    pub last_role_sync_at: DateTime,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

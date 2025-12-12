@@ -17,6 +17,16 @@ impl MigrationTrait for Migration {
                     .col(big_unsigned_uniq(User::DiscordId))
                     .col(string(User::Name))
                     .col(boolean(User::Admin))
+                    .col(
+                        timestamp(User::LastGuildSyncAt)
+                            .default(Expr::current_timestamp())
+                            .not_null(),
+                    )
+                    .col(
+                        timestamp(User::LastRoleSyncAt)
+                            .default(Expr::current_timestamp())
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -37,4 +47,6 @@ pub enum User {
     DiscordId,
     Name,
     Admin,
+    LastGuildSyncAt,
+    LastRoleSyncAt,
 }

@@ -3,7 +3,10 @@ use sea_orm::DatabaseConnection;
 use serenity::all::Member;
 
 use crate::server::{
-    data::discord::{DiscordGuildRoleRepository, UserDiscordGuildRoleRepository},
+    data::{
+        discord::{DiscordGuildRoleRepository, UserDiscordGuildRoleRepository},
+        user::UserRepository,
+    },
     error::AppError,
 };
 
@@ -67,14 +70,14 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     /// Updates role memberships for all users who have logged into the application and are
     /// members of the specified guild. Only processes logged-in users and only syncs roles
     /// that exist in the database. Used during bot startup to catch missed role changes
-    /// while the bot was offline.
+    /// while the bot was offline. Updates the last_role_sync_at timestamp for all synced users.
     ///
     /// # Arguments
     /// - `guild_id`: Discord's unique identifier for the guild (u64)
     /// - `members`: Slice of Discord Member objects for users in the guild
     ///
     /// # Returns
-    /// - `Ok(())`: Sync completed successfully for all applicable users
+    /// - `Ok(())`: Sync completed successfully and timestamps updated
     /// - `Err(AppError)`: Database error during user query or role sync
     pub async fn sync_guild_member_roles(
         &self,
@@ -106,8 +109,8 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         }
 
         // Sync roles for each logged-in user
-        let mut synced_count = 0;
-        for user in logged_in_users {
+        let mut synced_user_ids = Vec::new();
+        for user in &logged_in_users {
             // Find the corresponding member
             if let Some(member) = members
                 .iter()
@@ -121,16 +124,24 @@ impl<'a> UserDiscordGuildRoleService<'a> {
                         e
                     );
                 } else {
-                    synced_count += 1;
+                    synced_user_ids.push(user.id);
                 }
             }
         }
 
         tracing::debug!(
             "Synced role memberships for {} users in guild {}",
-            synced_count,
+            synced_user_ids.len(),
             guild_id
         );
+
+        // Update last_role_sync_at timestamps for all synced users
+        if !synced_user_ids.is_empty() {
+            let user_repo = UserRepository::new(self.db);
+            user_repo
+                .update_role_sync_timestamps(&synced_user_ids)
+                .await?;
+        }
 
         Ok(())
     }
