@@ -201,39 +201,85 @@ fn format_duration(d: &Duration) -> String {
 
 /// Helper to parse duration string like "1h", "30m", "2h30m"
 fn parse_duration(s: &str) -> Option<Duration> {
-    if s.trim().is_empty() {
+    let s = s.trim();
+    if s.is_empty() {
         return None;
     }
 
-    let s = s.trim().to_lowercase();
+    let s = s.to_lowercase();
     let mut total_seconds = 0i64;
     let mut current_num = String::new();
+    let mut has_valid_unit = false;
 
     for ch in s.chars() {
         if ch.is_ascii_digit() {
             current_num.push(ch);
         } else if ch == 'h' {
+            if current_num.is_empty() {
+                return None; // 'h' without number
+            }
             if let Ok(hours) = current_num.parse::<i64>() {
                 total_seconds += hours * 3600;
                 current_num.clear();
+                has_valid_unit = true;
+            } else {
+                return None;
             }
         } else if ch == 'm' {
+            if current_num.is_empty() {
+                return None; // 'm' without number
+            }
             if let Ok(minutes) = current_num.parse::<i64>() {
                 total_seconds += minutes * 60;
                 current_num.clear();
+                has_valid_unit = true;
+            } else {
+                return None;
             }
         } else if ch == 's' {
+            if current_num.is_empty() {
+                return None; // 's' without number
+            }
             if let Ok(seconds) = current_num.parse::<i64>() {
                 total_seconds += seconds;
                 current_num.clear();
+                has_valid_unit = true;
+            } else {
+                return None;
             }
+        } else if ch.is_whitespace() {
+            // Allow whitespace
+            continue;
+        } else {
+            // Invalid character
+            return None;
         }
     }
 
-    if total_seconds > 0 {
+    // Check if there are leftover digits (number without unit)
+    if !current_num.is_empty() {
+        return None;
+    }
+
+    if total_seconds > 0 && has_valid_unit {
         Some(Duration::seconds(total_seconds))
     } else {
         None
+    }
+}
+
+/// Validates duration input - returns None if valid or empty, Some(error) if invalid
+fn validate_duration_input(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None; // Empty is valid (optional field)
+    }
+
+    // Try to parse it
+    if parse_duration(trimmed).is_some() {
+        None // Valid duration
+    } else {
+        Some("Invalid format. Use: 1h, 30m, 1h30m, etc.".to_string())
     }
 }
 
@@ -245,11 +291,14 @@ fn FleetCategoryFormFields(
     ping_reminder_str: Signal<String>,
     max_pre_ping_str: Signal<String>,
     is_submitting: bool,
+    ping_cooldown_error: Signal<Option<String>>,
+    ping_reminder_error: Signal<Option<String>>,
+    max_pre_ping_error: Signal<Option<String>>,
 ) -> Element {
     rsx! {
         // Category Name Input
         div {
-            class: "form-control w-full gap-3",
+            class: "form-control w-full flex flex-col gap-2",
             label {
                 class: "label",
                 span {
@@ -270,7 +319,7 @@ fn FleetCategoryFormFields(
 
         // Ping Cooldown Input
         div {
-            class: "form-control w-full gap-3",
+            class: "form-control w-full flex flex-col gap-2",
             label {
                 class: "label",
                 span {
@@ -278,13 +327,25 @@ fn FleetCategoryFormFields(
                     "Ping Cooldown (optional)"
                 }
             }
-            input {
-                r#type: "text",
-                class: "input input-bordered w-full",
-                placeholder: "e.g., 1h, 30m, 1h30m",
-                value: "{ping_cooldown_str()}",
-                oninput: move |evt| ping_cooldown_str.set(evt.value()),
-                disabled: is_submitting,
+            div {
+                input {
+                    r#type: "text",
+                    class: if ping_cooldown_error().is_some() { "input input-bordered input-error w-full" } else { "input input-bordered w-full" },
+                    placeholder: "e.g., 1h, 30m, 1h30m",
+                    value: "{ping_cooldown_str()}",
+                    oninput: move |evt| {
+                        let value = evt.value();
+                        ping_cooldown_str.set(value.clone());
+                        ping_cooldown_error.set(validate_duration_input(&value));
+                    },
+                    disabled: is_submitting,
+                }
+                if let Some(error) = ping_cooldown_error() {
+                    div {
+                        class: "text-error text-sm mt-1",
+                        "{error}"
+                    }
+                }
             }
             label {
                 class: "label flex-col items-start gap-1",
@@ -301,7 +362,7 @@ fn FleetCategoryFormFields(
 
         // Ping Reminder Input
         div {
-            class: "form-control w-full gap-3",
+            class: "form-control w-full flex flex-col gap-2",
             label {
                 class: "label",
                 span {
@@ -309,13 +370,25 @@ fn FleetCategoryFormFields(
                     "Ping Reminder (optional)"
                 }
             }
-            input {
-                r#type: "text",
-                class: "input input-bordered w-full",
-                placeholder: "e.g., 15m, 30m",
-                value: "{ping_reminder_str()}",
-                oninput: move |evt| ping_reminder_str.set(evt.value()),
-                disabled: is_submitting,
+            div {
+                input {
+                    r#type: "text",
+                    class: if ping_reminder_error().is_some() { "input input-bordered input-error w-full" } else { "input input-bordered w-full" },
+                    placeholder: "e.g., 15m, 30m",
+                    value: "{ping_reminder_str()}",
+                    oninput: move |evt| {
+                        let value = evt.value();
+                        ping_reminder_str.set(value.clone());
+                        ping_reminder_error.set(validate_duration_input(&value));
+                    },
+                    disabled: is_submitting,
+                }
+                if let Some(error) = ping_reminder_error() {
+                    div {
+                        class: "text-error text-sm mt-1",
+                        "{error}"
+                    }
+                }
             }
             label {
                 class: "label flex-col items-start gap-1",
@@ -332,7 +405,7 @@ fn FleetCategoryFormFields(
 
         // Max Pre-Ping Input
         div {
-            class: "form-control w-full gap-3",
+            class: "form-control w-full flex flex-col gap-2",
             label {
                 class: "label",
                 span {
@@ -340,13 +413,25 @@ fn FleetCategoryFormFields(
                     "Max Pre-Ping (optional)"
                 }
             }
-            input {
-                r#type: "text",
-                class: "input input-bordered w-full",
-                placeholder: "e.g., 2h, 3h",
-                value: "{max_pre_ping_str()}",
-                oninput: move |evt| max_pre_ping_str.set(evt.value()),
-                disabled: is_submitting,
+            div {
+                input {
+                    r#type: "text",
+                    class: if max_pre_ping_error().is_some() { "input input-bordered input-error w-full" } else { "input input-bordered w-full" },
+                    placeholder: "e.g., 2h, 3h",
+                    value: "{max_pre_ping_str()}",
+                    oninput: move |evt| {
+                        let value = evt.value();
+                        max_pre_ping_str.set(value.clone());
+                        max_pre_ping_error.set(validate_duration_input(&value));
+                    },
+                    disabled: is_submitting,
+                }
+                if let Some(error) = max_pre_ping_error() {
+                    div {
+                        class: "text-error text-sm mt-1",
+                        "{error}"
+                    }
+                }
             }
             label {
                 class: "label flex-col items-start gap-1",
@@ -379,6 +464,9 @@ fn CreateCategoryModal(
     let mut submit_max_pre_ping = use_signal(|| None::<Duration>);
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
+    let mut ping_cooldown_error = use_signal(|| None::<String>);
+    let mut ping_reminder_error = use_signal(|| None::<String>);
+    let mut max_pre_ping_error = use_signal(|| None::<String>);
 
     // Reset form when modal opens (clears data from previous use)
     use_effect(move || {
@@ -393,6 +481,9 @@ fn CreateCategoryModal(
             submit_max_pre_ping.set(None);
             should_submit.set(false);
             error.set(None);
+            ping_cooldown_error.set(None);
+            ping_reminder_error.set(None);
+            max_pre_ping_error.set(None);
         }
     });
 
@@ -444,15 +535,32 @@ fn CreateCategoryModal(
             return;
         }
 
-        error.set(None);
-        submit_name.set(name);
-        submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
-        submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
-        submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
-        should_submit.set(true);
+        // Validate all duration fields before submitting
+        let cooldown_err = validate_duration_input(&ping_cooldown_str());
+        let reminder_err = validate_duration_input(&ping_reminder_str());
+        let pre_ping_err = validate_duration_input(&max_pre_ping_str());
+
+        ping_cooldown_error.set(cooldown_err.clone());
+        ping_reminder_error.set(reminder_err.clone());
+        max_pre_ping_error.set(pre_ping_err.clone());
+
+        // Only submit if all validations pass
+        if cooldown_err.is_none() && reminder_err.is_none() && pre_ping_err.is_none() {
+            error.set(None);
+            submit_name.set(name);
+            submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
+            submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
+            submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
+            should_submit.set(true);
+        } else {
+            error.set(Some("Please fix the validation errors above".to_string()));
+        }
     };
 
     let is_submitting = should_submit();
+    let has_validation_errors = ping_cooldown_error().is_some()
+        || ping_reminder_error().is_some()
+        || max_pre_ping_error().is_some();
 
     rsx!(
         Modal {
@@ -468,7 +576,10 @@ fn CreateCategoryModal(
                     ping_cooldown_str,
                     ping_reminder_str,
                     max_pre_ping_str,
-                    is_submitting
+                    is_submitting,
+                    ping_cooldown_error,
+                    ping_reminder_error,
+                    max_pre_ping_error
                 }
 
                 // Error Message
@@ -492,7 +603,7 @@ fn CreateCategoryModal(
                     button {
                         r#type: "submit",
                         class: "btn btn-primary",
-                        disabled: is_submitting,
+                        disabled: is_submitting || has_validation_errors,
                         if is_submitting {
                             span { class: "loading loading-spinner loading-sm mr-2" }
                             "Creating..."
@@ -666,6 +777,9 @@ fn EditCategoryModal(
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut category_id = use_signal(|| 0i32);
+    let mut ping_cooldown_error = use_signal(|| None::<String>);
+    let mut ping_reminder_error = use_signal(|| None::<String>);
+    let mut max_pre_ping_error = use_signal(|| None::<String>);
 
     // Initialize form when modal opens with new data
     use_effect(move || {
@@ -697,6 +811,9 @@ fn EditCategoryModal(
                 // Reset error and submit state when opening with new data
                 error.set(None);
                 should_submit.set(false);
+                ping_cooldown_error.set(None);
+                ping_reminder_error.set(None);
+                max_pre_ping_error.set(None);
             }
         }
     });
@@ -750,15 +867,32 @@ fn EditCategoryModal(
             return;
         }
 
-        error.set(None);
-        submit_name.set(name);
-        submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
-        submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
-        submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
-        should_submit.set(true);
+        // Validate all duration fields before submitting
+        let cooldown_err = validate_duration_input(&ping_cooldown_str());
+        let reminder_err = validate_duration_input(&ping_reminder_str());
+        let pre_ping_err = validate_duration_input(&max_pre_ping_str());
+
+        ping_cooldown_error.set(cooldown_err.clone());
+        ping_reminder_error.set(reminder_err.clone());
+        max_pre_ping_error.set(pre_ping_err.clone());
+
+        // Only submit if all validations pass
+        if cooldown_err.is_none() && reminder_err.is_none() && pre_ping_err.is_none() {
+            error.set(None);
+            submit_name.set(name);
+            submit_ping_cooldown.set(parse_duration(&ping_cooldown_str()));
+            submit_ping_reminder.set(parse_duration(&ping_reminder_str()));
+            submit_max_pre_ping.set(parse_duration(&max_pre_ping_str()));
+            should_submit.set(true);
+        } else {
+            error.set(Some("Please fix the validation errors above".to_string()));
+        }
     };
 
     let is_submitting = should_submit();
+    let has_validation_errors = ping_cooldown_error().is_some()
+        || ping_reminder_error().is_some()
+        || max_pre_ping_error().is_some();
 
     rsx!(
         Modal {
@@ -774,7 +908,10 @@ fn EditCategoryModal(
                     ping_cooldown_str,
                     ping_reminder_str,
                     max_pre_ping_str,
-                    is_submitting
+                    is_submitting,
+                    ping_cooldown_error,
+                    ping_reminder_error,
+                    max_pre_ping_error
                 }
 
                 // Error Message
@@ -798,7 +935,7 @@ fn EditCategoryModal(
                     button {
                         r#type: "submit",
                         class: "btn btn-primary",
-                        disabled: is_submitting,
+                        disabled: is_submitting || has_validation_errors,
                         if is_submitting {
                             span { class: "loading loading-spinner loading-sm mr-2" }
                             "Updating..."
