@@ -2,7 +2,7 @@ use chrono::Duration;
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
-use crate::client::component::Modal;
+use crate::{client::component::Modal, model::ping_format::PingFormatDto};
 
 use super::{
     duration::{format_duration, parse_duration, validate_duration_input},
@@ -10,11 +10,15 @@ use super::{
 };
 
 #[cfg(feature = "web")]
-use crate::client::api::fleet_category::{create_fleet_category, update_fleet_category};
+use crate::client::api::{
+    fleet_category::{create_fleet_category, update_fleet_category},
+    ping_format::get_ping_formats,
+};
 
 /// Duration field values for submission
 #[derive(Clone, Default)]
 struct DurationFields {
+    ping_format_id: Option<i32>,
     ping_cooldown: Option<Duration>,
     ping_reminder: Option<Duration>,
     max_pre_ping: Option<Duration>,
@@ -37,6 +41,24 @@ pub fn CreateCategoryModal(
     let mut validation_errors = use_signal(ValidationErrorsData::default);
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
+    let mut ping_formats = use_signal(|| Vec::<PingFormatDto>::new());
+
+    // Fetch ping formats when modal opens
+    #[cfg(feature = "web")]
+    let ping_formats_future = use_resource(move || async move {
+        if show() {
+            get_ping_formats(guild_id, 0, 100).await.ok()
+        } else {
+            None
+        }
+    });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = ping_formats_future.read_unchecked().as_ref() {
+            ping_formats.set(result.ping_formats.clone());
+        }
+    });
 
     // Reset form when modal opens (clears data from previous use)
     use_effect(move || {
@@ -54,16 +76,21 @@ pub fn CreateCategoryModal(
     let future = use_resource(move || async move {
         if should_submit() {
             let (name, durations) = submit_data();
-            Some(
-                create_fleet_category(
-                    guild_id,
-                    name,
-                    durations.ping_cooldown,
-                    durations.ping_reminder,
-                    durations.max_pre_ping,
+            if let Some(ping_format_id) = durations.ping_format_id {
+                Some(
+                    create_fleet_category(
+                        guild_id,
+                        ping_format_id,
+                        name,
+                        durations.ping_cooldown,
+                        durations.ping_reminder,
+                        durations.max_pre_ping,
+                    )
+                    .await,
                 )
-                .await,
-            )
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -98,6 +125,11 @@ pub fn CreateCategoryModal(
             return;
         }
 
+        if fields.ping_format_id.is_none() {
+            error.set(Some("Ping format is required".to_string()));
+            return;
+        }
+
         // Validate all duration fields before submitting
         let errors = ValidationErrorsData {
             ping_cooldown: validate_duration_input(&fields.ping_cooldown_str),
@@ -111,6 +143,7 @@ pub fn CreateCategoryModal(
         if !errors.has_errors() {
             error.set(None);
             let durations = DurationFields {
+                ping_format_id: fields.ping_format_id,
                 ping_cooldown: parse_duration(&fields.ping_cooldown_str),
                 ping_reminder: parse_duration(&fields.ping_reminder_str),
                 max_pre_ping: parse_duration(&fields.max_pre_ping_str),
@@ -137,7 +170,8 @@ pub fn CreateCategoryModal(
                 FleetCategoryFormFields {
                     form_fields,
                     validation_errors,
-                    is_submitting
+                    is_submitting,
+                    ping_formats
                 }
 
                 // Error Message
@@ -187,6 +221,24 @@ pub fn EditCategoryModal(
     let mut validation_errors = use_signal(ValidationErrorsData::default);
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
+    let mut ping_formats = use_signal(|| Vec::<PingFormatDto>::new());
+
+    // Fetch ping formats when modal opens
+    #[cfg(feature = "web")]
+    let ping_formats_future = use_resource(move || async move {
+        if show() {
+            get_ping_formats(guild_id, 0, 100).await.ok()
+        } else {
+            None
+        }
+    });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = ping_formats_future.read_unchecked().as_ref() {
+            ping_formats.set(result.ping_formats.clone());
+        }
+    });
 
     // Initialize form when modal opens with new data
     use_effect(move || {
@@ -194,6 +246,8 @@ pub fn EditCategoryModal(
             if let Some(category) = category_to_edit() {
                 form_fields.set(FormFieldsData {
                     category_name: category.name.clone(),
+                    ping_format_id: Some(category.ping_format_id),
+                    search_query: String::new(),
                     ping_cooldown_str: category
                         .ping_lead_time
                         .as_ref()
@@ -223,17 +277,22 @@ pub fn EditCategoryModal(
     let future = use_resource(move || async move {
         if should_submit() {
             let (id, name, durations) = submit_data();
-            Some(
-                update_fleet_category(
-                    guild_id,
-                    id,
-                    name,
-                    durations.ping_cooldown,
-                    durations.ping_reminder,
-                    durations.max_pre_ping,
+            if let Some(ping_format_id) = durations.ping_format_id {
+                Some(
+                    update_fleet_category(
+                        guild_id,
+                        id,
+                        ping_format_id,
+                        name,
+                        durations.ping_cooldown,
+                        durations.ping_reminder,
+                        durations.max_pre_ping,
+                    )
+                    .await,
                 )
-                .await,
-            )
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -268,6 +327,11 @@ pub fn EditCategoryModal(
             return;
         }
 
+        if fields.ping_format_id.is_none() {
+            error.set(Some("Ping format is required".to_string()));
+            return;
+        }
+
         // Validate all duration fields before submitting
         let errors = ValidationErrorsData {
             ping_cooldown: validate_duration_input(&fields.ping_cooldown_str),
@@ -281,6 +345,7 @@ pub fn EditCategoryModal(
         if !errors.has_errors() {
             error.set(None);
             let durations = DurationFields {
+                ping_format_id: fields.ping_format_id,
                 ping_cooldown: parse_duration(&fields.ping_cooldown_str),
                 ping_reminder: parse_duration(&fields.ping_reminder_str),
                 max_pre_ping: parse_duration(&fields.max_pre_ping_str),
@@ -308,7 +373,8 @@ pub fn EditCategoryModal(
                 FleetCategoryFormFields {
                     form_fields,
                     validation_errors,
-                    is_submitting
+                    is_submitting,
+                    ping_formats
                 }
 
                 // Error Message

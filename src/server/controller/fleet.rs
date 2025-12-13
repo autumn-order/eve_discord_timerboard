@@ -46,6 +46,7 @@ pub async fn create_fleet_category(
     let category = service
         .create(
             guild_id,
+            payload.ping_format_id,
             payload.name,
             payload.ping_lead_time,
             payload.ping_reminder,
@@ -95,6 +96,7 @@ pub async fn update_fleet_category(
         .update(
             fleet_id,
             guild_id,
+            payload.ping_format_id,
             payload.name,
             payload.ping_lead_time,
             payload.ping_reminder,
@@ -109,6 +111,7 @@ pub async fn update_fleet_category(
             Json(FleetCategoryDto {
                 id: 0,
                 guild_id: 0,
+                ping_format_id: 0,
                 name: String::new(),
                 ping_lead_time: None,
                 ping_reminder: None,

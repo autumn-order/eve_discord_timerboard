@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct FleetCategoryDto {
     pub id: i32,
     pub guild_id: i64,
+    pub ping_format_id: i32,
     pub name: String,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
@@ -13,6 +14,7 @@ pub struct FleetCategoryDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateFleetCategoryDto {
+    pub ping_format_id: i32,
     pub name: String,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
@@ -21,6 +23,7 @@ pub struct CreateFleetCategoryDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateFleetCategoryDto {
+    pub ping_format_id: i32,
     pub name: String,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,

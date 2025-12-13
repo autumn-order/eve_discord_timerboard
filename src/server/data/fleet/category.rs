@@ -17,6 +17,7 @@ impl<'a> FleetCategoryRepository<'a> {
     pub async fn create(
         &self,
         guild_id: i64,
+        ping_format_id: i32,
         name: String,
         ping_lead_time: Option<Duration>,
         ping_reminder: Option<Duration>,
@@ -24,6 +25,7 @@ impl<'a> FleetCategoryRepository<'a> {
     ) -> Result<entity::fleet_category::Model, DbErr> {
         entity::fleet_category::ActiveModel {
             guild_id: ActiveValue::Set(guild_id),
+            ping_format_id: ActiveValue::Set(ping_format_id),
             name: ActiveValue::Set(name),
             ping_cooldown: ActiveValue::Set(ping_lead_time.map(|d| d.num_seconds() as i32)),
             ping_reminder: ActiveValue::Set(ping_reminder.map(|d| d.num_seconds() as i32)),
@@ -63,6 +65,7 @@ impl<'a> FleetCategoryRepository<'a> {
     pub async fn update(
         &self,
         id: i32,
+        ping_format_id: i32,
         name: String,
         ping_lead_time: Option<Duration>,
         ping_reminder: Option<Duration>,
@@ -77,6 +80,7 @@ impl<'a> FleetCategoryRepository<'a> {
             )))?;
 
         let mut active_model: entity::fleet_category::ActiveModel = category.into();
+        active_model.ping_format_id = ActiveValue::Set(ping_format_id);
         active_model.name = ActiveValue::Set(name);
         active_model.ping_cooldown =
             ActiveValue::Set(ping_lead_time.map(|d| d.num_seconds() as i32));

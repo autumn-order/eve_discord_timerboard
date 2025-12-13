@@ -27,6 +27,7 @@ pub async fn get_fleet_categories(
 /// Create a new fleet category
 pub async fn create_fleet_category(
     guild_id: u64,
+    ping_format_id: i32,
     name: String,
     ping_cooldown: Option<Duration>,
     ping_reminder: Option<Duration>,
@@ -34,6 +35,7 @@ pub async fn create_fleet_category(
 ) -> Result<(), ApiError> {
     let url = format!("/api/timerboard/{}/fleet/category", guild_id);
     let payload = CreateFleetCategoryDto {
+        ping_format_id,
         name,
         ping_lead_time: ping_cooldown,
         ping_reminder,
@@ -49,6 +51,7 @@ pub async fn create_fleet_category(
 pub async fn update_fleet_category(
     guild_id: u64,
     category_id: i32,
+    ping_format_id: i32,
     name: String,
     ping_cooldown: Option<Duration>,
     ping_reminder: Option<Duration>,
@@ -59,6 +62,7 @@ pub async fn update_fleet_category(
         guild_id, category_id
     );
     let payload = UpdateFleetCategoryDto {
+        ping_format_id,
         name,
         ping_lead_time: ping_cooldown,
         ping_reminder,
