@@ -17,32 +17,37 @@ impl<'a> PingFormatFieldRepository<'a> {
         &self,
         ping_format_id: i64,
         name: String,
+        priority: i32,
     ) -> Result<entity::ping_format_field::Model, DbErr> {
         entity::ping_format_field::ActiveModel {
             ping_format_id: ActiveValue::Set(ping_format_id),
             name: ActiveValue::Set(name),
+            priority: ActiveValue::Set(priority),
             ..Default::default()
         }
         .insert(self.db)
         .await
     }
 
-    /// Gets all fields for a ping format
+    /// Gets all fields for a ping format, ordered by priority
     pub async fn get_by_ping_format_id(
         &self,
         ping_format_id: i64,
     ) -> Result<Vec<entity::ping_format_field::Model>, DbErr> {
+        use sea_orm::QueryOrder;
         entity::prelude::PingFormatField::find()
             .filter(entity::ping_format_field::Column::PingFormatId.eq(ping_format_id))
+            .order_by_asc(entity::ping_format_field::Column::Priority)
             .all(self.db)
             .await
     }
 
-    /// Updates a ping format field's name
+    /// Updates a ping format field's name and priority
     pub async fn update(
         &self,
         id: i32,
         name: String,
+        priority: i32,
     ) -> Result<entity::ping_format_field::Model, DbErr> {
         let field = entity::prelude::PingFormatField::find_by_id(id)
             .one(self.db)
@@ -54,6 +59,7 @@ impl<'a> PingFormatFieldRepository<'a> {
 
         let mut active_model: entity::ping_format_field::ActiveModel = field.into();
         active_model.name = ActiveValue::Set(name);
+        active_model.priority = ActiveValue::Set(priority);
 
         active_model.update(self.db).await
     }

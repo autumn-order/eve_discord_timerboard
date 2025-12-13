@@ -29,14 +29,14 @@ pub async fn get_ping_formats(
 pub async fn create_ping_format(
     guild_id: u64,
     name: String,
-    fields: Vec<String>,
+    fields: Vec<(String, i32)>, // (name, priority)
 ) -> Result<(), ApiError> {
     let url = format!("/api/timerboard/{}/ping/format", guild_id);
     let payload = CreatePingFormatDto {
         name,
         fields: fields
             .into_iter()
-            .map(|name| CreatePingFormatFieldDto { name })
+            .map(|(name, priority)| CreatePingFormatFieldDto { name, priority })
             .collect(),
     };
     let body = serialize_json(&payload)?;
@@ -50,14 +50,14 @@ pub async fn update_ping_format(
     guild_id: u64,
     format_id: i32,
     name: String,
-    fields: Vec<(Option<i32>, String)>,
+    fields: Vec<(Option<i32>, String, i32)>, // (id, name, priority)
 ) -> Result<(), ApiError> {
     let url = format!("/api/timerboard/{}/ping/format/{}", guild_id, format_id);
     let payload = UpdatePingFormatDto {
         name,
         fields: fields
             .into_iter()
-            .map(|(id, name)| UpdatePingFormatFieldDto { id, name })
+            .map(|(id, name, priority)| UpdatePingFormatFieldDto { id, name, priority })
             .collect(),
     };
     let body = serialize_json(&payload)?;

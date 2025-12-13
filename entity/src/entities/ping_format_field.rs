@@ -9,6 +9,7 @@ pub struct Model {
     pub id: i32,
     pub ping_format_id: i64,
     pub name: String,
+    pub priority: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

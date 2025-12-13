@@ -22,7 +22,7 @@ impl<'a> PingFormatService<'a> {
         &self,
         guild_id: i64,
         name: String,
-        field_names: Vec<String>,
+        fields: Vec<(String, i32)>, // (name, priority)
     ) -> Result<PingFormatDto, AppError> {
         let format_repo = PingFormatRepository::new(self.db);
         let field_repo = PingFormatFieldRepository::new(self.db);
@@ -31,13 +31,16 @@ impl<'a> PingFormatService<'a> {
         let ping_format = format_repo.create(guild_id, name).await?;
 
         // Create all the fields
-        let mut fields = Vec::new();
-        for field_name in field_names {
-            let field = field_repo.create(ping_format.id as i64, field_name).await?;
-            fields.push(PingFormatFieldDto {
+        let mut result_fields = Vec::new();
+        for (field_name, priority) in fields {
+            let field = field_repo
+                .create(ping_format.id as i64, field_name, priority)
+                .await?;
+            result_fields.push(PingFormatFieldDto {
                 id: field.id,
                 ping_format_id: field.ping_format_id,
                 name: field.name,
+                priority: field.priority,
             });
         }
 
@@ -45,7 +48,7 @@ impl<'a> PingFormatService<'a> {
             id: ping_format.id,
             guild_id: ping_format.guild_id,
             name: ping_format.name,
-            fields,
+            fields: result_fields,
         })
     }
 
@@ -85,6 +88,7 @@ impl<'a> PingFormatService<'a> {
                         id: f.id,
                         ping_format_id: f.ping_format_id,
                         name: f.name,
+                        priority: f.priority,
                     })
                     .collect(),
             });
@@ -106,7 +110,7 @@ impl<'a> PingFormatService<'a> {
         id: i32,
         guild_id: i64,
         name: String,
-        fields: Vec<(Option<i32>, String)>, // (id, name) - id is None for new fields
+        fields: Vec<(Option<i32>, String, i32)>, // (id, name, priority) - id is None for new fields
     ) -> Result<Option<PingFormatDto>, AppError> {
         let format_repo = PingFormatRepository::new(self.db);
         let field_repo = PingFormatFieldRepository::new(self.db);
@@ -128,23 +132,27 @@ impl<'a> PingFormatService<'a> {
         let mut updated_fields = Vec::new();
         let mut existing_field_ids: Vec<i32> = Vec::new();
 
-        for (field_id, field_name) in fields {
+        for (field_id, field_name, priority) in fields {
             if let Some(id) = field_id {
                 // Update existing field
-                let field = field_repo.update(id, field_name).await?;
+                let field = field_repo.update(id, field_name, priority).await?;
                 existing_field_ids.push(id);
                 updated_fields.push(PingFormatFieldDto {
                     id: field.id,
                     ping_format_id: field.ping_format_id,
                     name: field.name,
+                    priority: field.priority,
                 });
             } else {
                 // Create new field
-                let field = field_repo.create(ping_format.id as i64, field_name).await?;
+                let field = field_repo
+                    .create(ping_format.id as i64, field_name, priority)
+                    .await?;
                 updated_fields.push(PingFormatFieldDto {
                     id: field.id,
                     ping_format_id: field.ping_format_id,
                     name: field.name,
+                    priority: field.priority,
                 });
             }
         }

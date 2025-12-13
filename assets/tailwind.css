@@ -1343,6 +1343,9 @@
   .w-16 {
     width: calc(var(--spacing) * 16);
   }
+  .w-20 {
+    width: calc(var(--spacing) * 20);
+  }
   .w-full {
     width: 100%;
   }
@@ -1372,6 +1375,9 @@
         outline-offset: 2px;
       }
     }
+  }
+  .cursor-move {
+    cursor: move;
   }
   .stats-vertical {
     @layer daisyui.l1.l2 {
@@ -1629,6 +1635,10 @@
       --btn-fg: var(--color-primary-content);
     }
   }
+  .select-none {
+    -webkit-user-select: none;
+    user-select: none;
+  }
   .input-error {
     @layer daisyui.l1.l2 {
       &, &:focus, &:focus-within {
@@ -1640,6 +1650,13 @@
     &:hover {
       @media (hover: hover) {
         background-color: var(--color-base-300);
+      }
+    }
+  }
+  .hover\:opacity-100 {
+    &:hover {
+      @media (hover: hover) {
+        opacity: 100%;
       }
     }
   }

@@ -13,6 +13,7 @@ pub struct PingFormatFieldDto {
     pub id: i32,
     pub ping_format_id: i64,
     pub name: String,
+    pub priority: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +25,7 @@ pub struct CreatePingFormatDto {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreatePingFormatFieldDto {
     pub name: String,
+    pub priority: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +38,7 @@ pub struct UpdatePingFormatDto {
 pub struct UpdatePingFormatFieldDto {
     pub id: Option<i32>,
     pub name: String,
+    pub priority: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

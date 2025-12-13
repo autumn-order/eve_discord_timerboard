@@ -43,9 +43,13 @@ pub async fn create_ping_format(
 
     let service = PingFormatService::new(&state.db);
 
-    let field_names: Vec<String> = payload.fields.into_iter().map(|f| f.name).collect();
+    let fields: Vec<(String, i32)> = payload
+        .fields
+        .into_iter()
+        .map(|f| (f.name, f.priority))
+        .collect();
 
-    let ping_format = service.create(guild_id, payload.name, field_names).await?;
+    let ping_format = service.create(guild_id, payload.name, fields).await?;
 
     Ok((StatusCode::CREATED, Json(ping_format)))
 }
@@ -85,8 +89,11 @@ pub async fn update_ping_format(
 
     let service = PingFormatService::new(&state.db);
 
-    let fields: Vec<(Option<i32>, String)> =
-        payload.fields.into_iter().map(|f| (f.id, f.name)).collect();
+    let fields: Vec<(Option<i32>, String, i32)> = payload
+        .fields
+        .into_iter()
+        .map(|f| (f.id, f.name, f.priority))
+        .collect();
 
     let ping_format = service
         .update(format_id, guild_id, payload.name, fields)

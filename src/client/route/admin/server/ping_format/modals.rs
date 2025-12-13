@@ -17,6 +17,7 @@ struct FormFieldsData {
 struct FieldData {
     id: Option<i32>,
     name: String,
+    priority: i32,
 }
 
 #[component]
@@ -26,7 +27,7 @@ pub fn CreatePingFormatModal(
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut form_fields = use_signal(FormFieldsData::default);
-    let mut submit_data = use_signal(|| (String::new(), Vec::<String>::new()));
+    let mut submit_data = use_signal(|| (String::new(), Vec::<(String, i32)>::new()));
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -79,14 +80,15 @@ pub fn CreatePingFormatModal(
         }
 
         error.set(None);
-        let field_names: Vec<String> = fields
+        let field_data: Vec<(String, i32)> = fields
             .fields
             .iter()
-            .filter(|f| !f.name.trim().is_empty())
-            .map(|f| f.name.clone())
+            .enumerate()
+            .filter(|(_, f)| !f.name.trim().is_empty())
+            .map(|(index, f)| (f.name.clone(), index as i32))
             .collect();
 
-        submit_data.set((fields.name, field_names));
+        submit_data.set((fields.name, field_data));
         should_submit.set(true);
     };
 
@@ -149,7 +151,13 @@ pub fn EditPingFormatModal(
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut form_fields = use_signal(FormFieldsData::default);
-    let mut submit_data = use_signal(|| (0i32, String::new(), Vec::<(Option<i32>, String)>::new()));
+    let mut submit_data = use_signal(|| {
+        (
+            0i32,
+            String::new(),
+            Vec::<(Option<i32>, String, i32)>::new(),
+        )
+    });
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -165,6 +173,7 @@ pub fn EditPingFormatModal(
                         .map(|f| FieldData {
                             id: Some(f.id),
                             name: f.name.clone(),
+                            priority: f.priority,
                         })
                         .collect(),
                 });
@@ -214,11 +223,12 @@ pub fn EditPingFormatModal(
         }
 
         error.set(None);
-        let field_data: Vec<(Option<i32>, String)> = fields
+        let field_data: Vec<(Option<i32>, String, i32)> = fields
             .fields
             .iter()
-            .filter(|f| !f.name.trim().is_empty())
-            .map(|f| (f.id, f.name.clone()))
+            .enumerate()
+            .filter(|(_, f)| !f.name.trim().is_empty())
+            .map(|(index, f)| (f.id, f.name.clone(), index as i32))
             .collect();
 
         let id = submit_data().0;
@@ -279,8 +289,42 @@ pub fn EditPingFormatModal(
 
 #[component]
 fn PingFormatFormFields(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> Element {
+    let mut dragging_index = use_signal(|| None::<usize>);
+
     let add_field = move |_| {
-        form_fields.write().fields.push(FieldData::default());
+        let new_priority = form_fields.read().fields.len() as i32;
+        form_fields.write().fields.push(FieldData {
+            priority: new_priority,
+            ..Default::default()
+        });
+    };
+
+    let on_drag_start = move |index: usize| {
+        move |_evt: Event<DragData>| {
+            dragging_index.set(Some(index));
+        }
+    };
+
+    let on_drag_over = move |_evt: Event<DragData>| {
+        _evt.prevent_default();
+    };
+
+    let on_drop = move |target_index: usize| {
+        move |_evt: Event<DragData>| {
+            _evt.prevent_default();
+            if let Some(source_index) = dragging_index() {
+                if source_index != target_index {
+                    let mut fields = form_fields.write();
+                    let item = fields.fields.remove(source_index);
+                    fields.fields.insert(target_index, item);
+                }
+            }
+            dragging_index.set(None);
+        }
+    };
+
+    let on_drag_end = move |_evt: Event<DragData>| {
+        dragging_index.set(None);
     };
 
     rsx!(
@@ -326,10 +370,21 @@ fn PingFormatFormFields(mut form_fields: Signal<FormFieldsData>, is_submitting: 
                 for (index, field) in form_fields().fields.iter().enumerate() {
                     {
                         let field_name = field.name.clone();
+                        let is_dragging = dragging_index() == Some(index);
                         rsx! {
                             div {
                                 key: "{index}",
-                                class: "flex gap-2 items-center",
+                                class: if is_dragging { "flex gap-2 items-center opacity-50" } else { "flex gap-2 items-center" },
+                                ondragover: on_drag_over,
+                                ondrop: on_drop(index),
+                                div {
+                                    class: "cursor-move text-xl opacity-50 hover:opacity-100 select-none",
+                                    title: "Drag to reorder",
+                                    draggable: !is_submitting,
+                                    ondragstart: on_drag_start(index),
+                                    ondragend: on_drag_end,
+                                    "⠿"
+                                }
                                 input {
                                     r#type: "text",
                                     class: "input input-bordered flex-1",
