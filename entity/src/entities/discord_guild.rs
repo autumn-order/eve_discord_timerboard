@@ -21,6 +21,8 @@ pub enum Relation {
     DiscordGuildRole,
     #[sea_orm(has_many = "super::fleet_category::Entity")]
     FleetCategory,
+    #[sea_orm(has_many = "super::ping_format::Entity")]
+    PingFormat,
     #[sea_orm(has_many = "super::user_discord_guild::Entity")]
     UserDiscordGuild,
 }
@@ -40,6 +42,12 @@ impl Related<super::discord_guild_role::Entity> for Entity {
 impl Related<super::fleet_category::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::FleetCategory.def()
+    }
+}
+
+impl Related<super::ping_format::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::PingFormat.def()
     }
 }
 

@@ -6,6 +6,8 @@ pub mod discord_guild;
 pub mod discord_guild_channel;
 pub mod discord_guild_role;
 pub mod fleet_category;
+pub mod ping_format;
+pub mod ping_format_field;
 pub mod user;
 pub mod user_discord_guild;
 pub mod user_discord_guild_role;

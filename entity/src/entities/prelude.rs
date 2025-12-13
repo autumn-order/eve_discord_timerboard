@@ -4,6 +4,8 @@ pub use super::discord_guild::Entity as DiscordGuild;
 pub use super::discord_guild_channel::Entity as DiscordGuildChannel;
 pub use super::discord_guild_role::Entity as DiscordGuildRole;
 pub use super::fleet_category::Entity as FleetCategory;
+pub use super::ping_format::Entity as PingFormat;
+pub use super::ping_format_field::Entity as PingFormatField;
 pub use super::user::Entity as User;
 pub use super::user_discord_guild::Entity as UserDiscordGuild;
 pub use super::user_discord_guild_role::Entity as UserDiscordGuildRole;
