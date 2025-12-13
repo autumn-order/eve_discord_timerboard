@@ -169,6 +169,7 @@ pub fn CreateCategoryModal(
                 onsubmit: on_submit,
 
                 FleetCategoryFormFields {
+                    guild_id,
                     form_fields,
                     validation_errors,
                     is_submitting,
@@ -379,6 +380,7 @@ pub fn EditCategoryModal(
                 onsubmit: on_submit,
 
                 FleetCategoryFormFields {
+                    guild_id,
                     form_fields,
                     validation_errors,
                     is_submitting,

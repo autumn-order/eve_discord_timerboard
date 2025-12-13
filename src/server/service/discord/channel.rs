@@ -1,9 +1,12 @@
 use dioxus_logger::tracing;
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder};
 use serenity::all::{ChannelId, ChannelType, GuildChannel};
 use std::collections::HashMap;
 
-use crate::server::{data::discord::DiscordGuildChannelRepository, error::AppError};
+use crate::{
+    model::discord::{DiscordGuildChannelDto, PaginatedDiscordGuildChannelsDto},
+    server::{data::discord::DiscordGuildChannelRepository, error::AppError},
+};
 
 pub struct DiscordGuildChannelService<'a> {
     db: &'a DatabaseConnection,
@@ -65,5 +68,43 @@ impl<'a> DiscordGuildChannelService<'a> {
         );
 
         Ok(())
+    }
+
+    /// Get paginated channels for a guild
+    pub async fn get_paginated(
+        &self,
+        guild_id: u64,
+        page: u64,
+        entries: u64,
+    ) -> Result<PaginatedDiscordGuildChannelsDto, AppError> {
+        use entity::prelude::DiscordGuildChannel;
+        use sea_orm::ColumnTrait;
+        use sea_orm::QueryFilter;
+
+        let paginator = DiscordGuildChannel::find()
+            .filter(entity::discord_guild_channel::Column::GuildId.eq(guild_id as i64))
+            .order_by_asc(entity::discord_guild_channel::Column::Position)
+            .paginate(self.db, entries);
+
+        let total = paginator.num_pages().await?;
+        let channels = paginator.fetch_page(page).await?;
+
+        let channel_dtos: Vec<DiscordGuildChannelDto> = channels
+            .into_iter()
+            .map(|channel| DiscordGuildChannelDto {
+                id: channel.id,
+                guild_id: channel.guild_id,
+                channel_id: channel.channel_id,
+                name: channel.name,
+                position: channel.position,
+            })
+            .collect();
+
+        Ok(PaginatedDiscordGuildChannelsDto {
+            channels: channel_dtos,
+            total: total * entries,
+            page,
+            entries,
+        })
     }
 }

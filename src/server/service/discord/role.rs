@@ -1,9 +1,12 @@
 use dioxus_logger::tracing;
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder};
 use serenity::all::{Role, RoleId};
 use std::collections::HashMap;
 
-use crate::server::{data::discord::DiscordGuildRoleRepository, error::AppError};
+use crate::{
+    model::discord::{DiscordGuildRoleDto, PaginatedDiscordGuildRolesDto},
+    server::{data::discord::DiscordGuildRoleRepository, error::AppError},
+};
 
 pub struct DiscordGuildRoleService<'a> {
     db: &'a DatabaseConnection,
@@ -40,5 +43,44 @@ impl<'a> DiscordGuildRoleService<'a> {
         tracing::info!("Updated {} roles for guild {}", guild_roles.len(), guild_id);
 
         Ok(())
+    }
+
+    /// Get paginated roles for a guild
+    pub async fn get_paginated(
+        &self,
+        guild_id: u64,
+        page: u64,
+        entries: u64,
+    ) -> Result<PaginatedDiscordGuildRolesDto, AppError> {
+        use entity::prelude::DiscordGuildRole;
+        use sea_orm::ColumnTrait;
+        use sea_orm::QueryFilter;
+
+        let paginator = DiscordGuildRole::find()
+            .filter(entity::discord_guild_role::Column::GuildId.eq(guild_id as i64))
+            .order_by_asc(entity::discord_guild_role::Column::Position)
+            .paginate(self.db, entries);
+
+        let total = paginator.num_pages().await?;
+        let roles = paginator.fetch_page(page).await?;
+
+        let role_dtos: Vec<DiscordGuildRoleDto> = roles
+            .into_iter()
+            .map(|role| DiscordGuildRoleDto {
+                id: role.id,
+                guild_id: role.guild_id,
+                role_id: role.role_id,
+                name: role.name,
+                color: role.color,
+                position: role.position,
+            })
+            .collect();
+
+        Ok(PaginatedDiscordGuildRolesDto {
+            roles: role_dtos,
+            total: total * entries,
+            page,
+            entries,
+        })
     }
 }

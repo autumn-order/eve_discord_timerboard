@@ -1,8 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::model::ping_format::PingFormatDto;
+use crate::model::{
+    discord::{DiscordGuildChannelDto, DiscordGuildRoleDto},
+    ping_format::PingFormatDto,
+};
 
 use super::duration::validate_duration_input;
+
+#[cfg(feature = "web")]
+use crate::client::api::discord::{get_discord_guild_channels, get_discord_guild_roles};
 
 /// Tab selection for the bottom section
 #[derive(Clone, Copy, PartialEq)]
@@ -18,17 +24,18 @@ impl Default for ConfigTab {
     }
 }
 
-/// Placeholder role data
+/// Role data
 #[derive(Clone, PartialEq)]
 pub struct RoleData {
-    pub id: String,
+    pub id: i64,
     pub name: String,
+    pub color: String,
 }
 
-/// Placeholder channel data
+/// Channel data
 #[derive(Clone, PartialEq)]
 pub struct ChannelData {
-    pub id: String,
+    pub id: i64,
     pub name: String,
 }
 
@@ -69,6 +76,7 @@ pub struct ValidationErrorsData {
 /// Reusable form fields component for fleet category forms
 #[component]
 pub fn FleetCategoryFormFields(
+    guild_id: u64,
     form_fields: Signal<FormFieldsData>,
     validation_errors: Signal<ValidationErrorsData>,
     is_submitting: bool,
@@ -344,6 +352,7 @@ pub fn FleetCategoryFormFields(
 
         // Tabbed Configuration Section
         ConfigurationTabs {
+            guild_id,
             form_fields,
             is_submitting
         }
@@ -352,7 +361,11 @@ pub fn FleetCategoryFormFields(
 
 /// Configuration tabs component for roles and channels
 #[component]
-fn ConfigurationTabs(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> Element {
+fn ConfigurationTabs(
+    guild_id: u64,
+    mut form_fields: Signal<FormFieldsData>,
+    is_submitting: bool,
+) -> Element {
     let active_tab = form_fields().active_tab;
 
     rsx! {
@@ -391,18 +404,21 @@ fn ConfigurationTabs(mut form_fields: Signal<FormFieldsData>, is_submitting: boo
                 match active_tab {
                     ConfigTab::AccessRoles => rsx! {
                         AccessRolesTab {
+                            guild_id,
                             form_fields,
                             is_submitting
                         }
                     },
                     ConfigTab::PingRoles => rsx! {
                         PingRolesTab {
+                            guild_id,
                             form_fields,
                             is_submitting
                         }
                     },
                     ConfigTab::Channels => rsx! {
                         ChannelsTab {
+                            guild_id,
                             form_fields,
                             is_submitting
                         }
@@ -415,8 +431,48 @@ fn ConfigurationTabs(mut form_fields: Signal<FormFieldsData>, is_submitting: boo
 
 /// Access Roles tab content
 #[component]
-fn AccessRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> Element {
+fn AccessRolesTab(
+    guild_id: u64,
+    mut form_fields: Signal<FormFieldsData>,
+    is_submitting: bool,
+) -> Element {
     let mut show_dropdown = use_signal(|| false);
+    let mut available_roles = use_signal(|| Vec::<DiscordGuildRoleDto>::new());
+
+    // Fetch roles when component mounts
+    #[cfg(feature = "web")]
+    let roles_future =
+        use_resource(move || async move { get_discord_guild_roles(guild_id, 0, 1000).await.ok() });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = roles_future.read_unchecked().as_ref() {
+            available_roles.set(result.roles.clone());
+        }
+    });
+
+    // Filter available roles by search query and exclude already added roles
+    let filtered_roles = use_memo(move || {
+        let roles = available_roles();
+        let query = form_fields().role_search_query.to_lowercase();
+        let access_role_ids: Vec<i64> = form_fields()
+            .access_roles
+            .iter()
+            .map(|ar| ar.role.id)
+            .collect();
+
+        roles
+            .into_iter()
+            .filter(|r| !access_role_ids.contains(&r.role_id))
+            .filter(|r| {
+                if query.is_empty() {
+                    true
+                } else {
+                    r.name.to_lowercase().contains(&query)
+                }
+            })
+            .collect::<Vec<_>>()
+    });
 
     rsx! {
         div {
@@ -447,13 +503,66 @@ fn AccessRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) 
                         },
                         disabled: is_submitting,
                     }
-                    if show_dropdown() {
-                        div {
-                            class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
-                            div {
-                                class: "px-4 py-2 text-center opacity-50 text-sm",
-                                "No roles available (functionality pending)"
+                    {
+                        let roles = filtered_roles();
+                        if show_dropdown() {
+                            if !roles.is_empty() {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto",
+                                        for role in roles {
+                                            {
+                                                let role_color = role.color.clone();
+                                                let role_name = role.name.clone();
+                                                rsx! {
+                                                    div {
+                                                        key: "{role.role_id}",
+                                                        class: "px-4 py-2 cursor-pointer hover:bg-base-200 flex items-center gap-2",
+                                                        onmousedown: move |evt| {
+                                                            evt.prevent_default();
+                                                            let new_role = RoleData {
+                                                                id: role.role_id,
+                                                                name: role.name.clone(),
+                                                                color: role.color.clone(),
+                                                            };
+                                                            let new_access_role = super::form_fields::AccessRoleData {
+                                                                role: new_role,
+                                                                can_view: true,
+                                                                can_create: false,
+                                                                can_manage: false,
+                                                            };
+                                                            form_fields.write().access_roles.push(new_access_role);
+                                                            form_fields.write().role_search_query = String::new();
+                                                            show_dropdown.set(false);
+                                                        },
+                                                        div {
+                                                            class: "w-4 h-4 rounded",
+                                                            style: "background-color: {role_color};"
+                                                        }
+                                                        "{role_name}"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
+                                        div {
+                                            class: "px-4 py-2 text-center opacity-50 text-sm",
+                                            if !form_fields().role_search_query.is_empty() {
+                                                "No roles found"
+                                            } else {
+                                                "No roles available"
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
                 }
@@ -545,8 +654,44 @@ fn AccessRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) 
 
 /// Ping Roles tab content
 #[component]
-fn PingRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> Element {
+fn PingRolesTab(
+    guild_id: u64,
+    mut form_fields: Signal<FormFieldsData>,
+    is_submitting: bool,
+) -> Element {
     let mut show_dropdown = use_signal(|| false);
+    let mut available_roles = use_signal(|| Vec::<DiscordGuildRoleDto>::new());
+
+    // Fetch roles when component mounts
+    #[cfg(feature = "web")]
+    let roles_future =
+        use_resource(move || async move { get_discord_guild_roles(guild_id, 0, 1000).await.ok() });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = roles_future.read_unchecked().as_ref() {
+            available_roles.set(result.roles.clone());
+        }
+    });
+
+    // Filter available roles by search query and exclude already added roles
+    let filtered_roles = use_memo(move || {
+        let roles = available_roles();
+        let query = form_fields().role_search_query.to_lowercase();
+        let ping_role_ids: Vec<i64> = form_fields().ping_roles.iter().map(|r| r.id).collect();
+
+        roles
+            .into_iter()
+            .filter(|r| !ping_role_ids.contains(&r.role_id))
+            .filter(|r| {
+                if query.is_empty() {
+                    true
+                } else {
+                    r.name.to_lowercase().contains(&query)
+                }
+            })
+            .collect::<Vec<_>>()
+    });
 
     rsx! {
         div {
@@ -577,13 +722,60 @@ fn PingRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) ->
                         },
                         disabled: is_submitting,
                     }
-                    if show_dropdown() {
-                        div {
-                            class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
-                            div {
-                                class: "px-4 py-2 text-center opacity-50 text-sm",
-                                "No roles available (functionality pending)"
+                    {
+                        let roles = filtered_roles();
+                        if show_dropdown() {
+                            if !roles.is_empty() {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto",
+                                        for role in roles {
+                                            {
+                                                let role_color = role.color.clone();
+                                                let role_name = role.name.clone();
+                                                rsx! {
+                                                    div {
+                                                        key: "{role.role_id}",
+                                                        class: "px-4 py-2 cursor-pointer hover:bg-base-200 flex items-center gap-2",
+                                                        onmousedown: move |evt| {
+                                                            evt.prevent_default();
+                                                            let new_role = RoleData {
+                                                                id: role.role_id,
+                                                                name: role.name.clone(),
+                                                                color: role.color.clone(),
+                                                            };
+                                                            form_fields.write().ping_roles.push(new_role);
+                                                            form_fields.write().role_search_query = String::new();
+                                                            show_dropdown.set(false);
+                                                        },
+                                                        div {
+                                                            class: "w-4 h-4 rounded",
+                                                            style: "background-color: {role_color};"
+                                                        }
+                                                        "{role_name}"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
+                                        div {
+                                            class: "px-4 py-2 text-center opacity-50 text-sm",
+                                            if !form_fields().role_search_query.is_empty() {
+                                                "No roles found"
+                                            } else {
+                                                "No roles available"
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
                 }
@@ -630,8 +822,46 @@ fn PingRolesTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) ->
 
 /// Channels tab content
 #[component]
-fn ChannelsTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> Element {
+fn ChannelsTab(
+    guild_id: u64,
+    mut form_fields: Signal<FormFieldsData>,
+    is_submitting: bool,
+) -> Element {
     let mut show_dropdown = use_signal(|| false);
+    let mut available_channels = use_signal(|| Vec::<DiscordGuildChannelDto>::new());
+
+    // Fetch channels when component mounts
+    #[cfg(feature = "web")]
+    let channels_future =
+        use_resource(
+            move || async move { get_discord_guild_channels(guild_id, 0, 1000).await.ok() },
+        );
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = channels_future.read_unchecked().as_ref() {
+            available_channels.set(result.channels.clone());
+        }
+    });
+
+    // Filter available channels by search query and exclude already added channels
+    let filtered_channels = use_memo(move || {
+        let channels = available_channels();
+        let query = form_fields().channel_search_query.to_lowercase();
+        let channel_ids: Vec<i64> = form_fields().channels.iter().map(|c| c.id).collect();
+
+        channels
+            .into_iter()
+            .filter(|c| !channel_ids.contains(&c.channel_id))
+            .filter(|c| {
+                if query.is_empty() {
+                    true
+                } else {
+                    c.name.to_lowercase().contains(&query)
+                }
+            })
+            .collect::<Vec<_>>()
+    });
 
     rsx! {
         div {
@@ -662,13 +892,49 @@ fn ChannelsTab(mut form_fields: Signal<FormFieldsData>, is_submitting: bool) -> 
                         },
                         disabled: is_submitting,
                     }
-                    if show_dropdown() {
-                        div {
-                            class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
-                            div {
-                                class: "px-4 py-2 text-center opacity-50 text-sm",
-                                "No channels available (functionality pending)"
+                    {
+                        let channels = filtered_channels();
+                        if show_dropdown() {
+                            if !channels.is_empty() {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto",
+                                        for channel in channels {
+                                            div {
+                                                key: "{channel.channel_id}",
+                                                class: "px-4 py-2 cursor-pointer hover:bg-base-200",
+                                                onmousedown: move |evt| {
+                                                    evt.prevent_default();
+                                                    let new_channel = ChannelData {
+                                                        id: channel.channel_id,
+                                                        name: channel.name.clone(),
+                                                    };
+                                                    form_fields.write().channels.push(new_channel);
+                                                    form_fields.write().channel_search_query = String::new();
+                                                    show_dropdown.set(false);
+                                                },
+                                                "# {channel.name}"
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                rsx! {
+                                    div {
+                                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
+                                        div {
+                                            class: "px-4 py-2 text-center opacity-50 text-sm",
+                                            if !form_fields().channel_search_query.is_empty() {
+                                                "No channels found"
+                                            } else {
+                                                "No channels available"
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                        } else {
+                            rsx! {}
                         }
                     }
                 }
