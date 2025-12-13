@@ -122,6 +122,24 @@ pub async fn update_fleet_category(
     }
 }
 
+/// GET /api/timerboard/{guild_id}/fleet/category/by-ping-format/{ping_format_id}
+/// Get fleet categories by ping format ID
+pub async fn get_fleet_categories_by_ping_format(
+    State(state): State<AppState>,
+    session: Session,
+    Path((_guild_id, ping_format_id)): Path<(i64, i32)>,
+) -> Result<impl IntoResponse, AppError> {
+    let _ = AuthGuard::new(&state.db, &session)
+        .require(&[Permission::Admin])
+        .await?;
+
+    let service = FleetCategoryService::new(&state.db);
+
+    let categories = service.get_by_ping_format_id(ping_format_id).await?;
+
+    Ok((StatusCode::OK, Json(categories)))
+}
+
 /// DELETE /api/timerboard/{guild_id}/fleet/category/{fleet_id}
 /// Delete a fleet category
 pub async fn delete_fleet_category(

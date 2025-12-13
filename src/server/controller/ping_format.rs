@@ -108,6 +108,7 @@ pub async fn update_ping_format(
                 guild_id: 0,
                 name: String::new(),
                 fields: Vec::new(),
+                fleet_category_count: 0,
             }),
         )),
     }

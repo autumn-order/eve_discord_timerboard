@@ -2,7 +2,10 @@ use chrono::Duration;
 
 use crate::{
     client::model::error::ApiError,
-    model::fleet::{CreateFleetCategoryDto, PaginatedFleetCategoriesDto, UpdateFleetCategoryDto},
+    model::fleet::{
+        CreateFleetCategoryDto, FleetCategoryDto, PaginatedFleetCategoriesDto,
+        UpdateFleetCategoryDto,
+    },
 };
 
 use super::helper::{
@@ -83,4 +86,18 @@ pub async fn delete_fleet_category(guild_id: u64, category_id: i32) -> Result<()
 
     let response = send_request(delete(&url)).await?;
     parse_empty_response(response).await
+}
+
+/// Get fleet categories by ping format ID
+pub async fn get_fleet_categories_by_ping_format(
+    guild_id: u64,
+    ping_format_id: i32,
+) -> Result<Vec<FleetCategoryDto>, ApiError> {
+    let url = format!(
+        "/api/timerboard/{}/fleet/category/by-ping-format/{}",
+        guild_id, ping_format_id
+    );
+
+    let response = send_request(get(&url)).await?;
+    parse_response(response).await
 }

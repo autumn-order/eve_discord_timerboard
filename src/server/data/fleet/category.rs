@@ -166,4 +166,16 @@ impl<'a> FleetCategoryRepository<'a> {
 
         Ok(count > 0)
     }
+
+    /// Gets fleet categories by ping format ID
+    pub async fn get_by_ping_format_id(
+        &self,
+        ping_format_id: i32,
+    ) -> Result<Vec<entity::fleet_category::Model>, DbErr> {
+        entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::PingFormatId.eq(ping_format_id))
+            .order_by_asc(entity::fleet_category::Column::Name)
+            .all(self.db)
+            .await
+    }
 }

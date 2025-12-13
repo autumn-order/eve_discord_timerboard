@@ -10,7 +10,7 @@ use crate::server::{
         discord::{get_all_discord_guilds, get_discord_guild_by_id},
         fleet::{
             create_fleet_category, delete_fleet_category, get_fleet_categories,
-            update_fleet_category,
+            get_fleet_categories_by_ping_format, update_fleet_category,
         },
         ping_format::{
             create_ping_format, delete_ping_format, get_ping_formats, update_ping_format,
@@ -35,6 +35,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/timerboard/{guild_id}/fleet/category/{fleet_id}",
             put(update_fleet_category).delete(delete_fleet_category),
+        )
+        .route(
+            "/api/timerboard/{guild_id}/fleet/category/by-ping-format/{ping_format_id}",
+            get(get_fleet_categories_by_ping_format),
         )
         .route(
             "/api/timerboard/{guild_id}/ping/format",

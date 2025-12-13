@@ -6,6 +6,7 @@ pub struct PingFormatDto {
     pub guild_id: i64,
     pub name: String,
     pub fields: Vec<PingFormatFieldDto>,
+    pub fleet_category_count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

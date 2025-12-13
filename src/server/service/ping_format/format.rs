@@ -44,11 +44,15 @@ impl<'a> PingFormatService<'a> {
             });
         }
 
+        // Get fleet category count
+        let fleet_category_count = format_repo.get_fleet_category_count(ping_format.id).await?;
+
         Ok(PingFormatDto {
             id: ping_format.id,
             guild_id: ping_format.guild_id,
             name: ping_format.name,
             fields: result_fields,
+            fleet_category_count,
         })
     }
 
@@ -78,6 +82,8 @@ impl<'a> PingFormatService<'a> {
                 .get_by_ping_format_id(ping_format.id as i64)
                 .await?;
 
+            let fleet_category_count = format_repo.get_fleet_category_count(ping_format.id).await?;
+
             ping_format_dtos.push(PingFormatDto {
                 id: ping_format.id,
                 guild_id: ping_format.guild_id,
@@ -91,6 +97,7 @@ impl<'a> PingFormatService<'a> {
                         priority: f.priority,
                     })
                     .collect(),
+                fleet_category_count,
             });
         }
 
@@ -164,11 +171,15 @@ impl<'a> PingFormatService<'a> {
             }
         }
 
+        // Get fleet category count
+        let fleet_category_count = format_repo.get_fleet_category_count(ping_format.id).await?;
+
         Ok(Some(PingFormatDto {
             id: ping_format.id,
             guild_id: ping_format.guild_id,
             name: ping_format.name,
             fields: updated_fields,
+            fleet_category_count,
         }))
     }
 

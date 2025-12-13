@@ -152,4 +152,28 @@ impl<'a> FleetCategoryService<'a> {
 
         Ok(true)
     }
+
+    /// Gets fleet categories by ping format ID
+    pub async fn get_by_ping_format_id(
+        &self,
+        ping_format_id: i32,
+    ) -> Result<Vec<FleetCategoryDto>, AppError> {
+        let repo = FleetCategoryRepository::new(self.db);
+
+        let categories = repo.get_by_ping_format_id(ping_format_id).await?;
+
+        Ok(categories
+            .into_iter()
+            .map(|c| FleetCategoryDto {
+                id: c.id,
+                guild_id: c.guild_id,
+                ping_format_id: c.ping_format_id,
+                ping_format_name: String::new(), // Not needed for this use case
+                name: c.name,
+                ping_lead_time: c.ping_cooldown.map(|s| Duration::seconds(s as i64)),
+                ping_reminder: c.ping_reminder.map(|s| Duration::seconds(s as i64)),
+                max_pre_ping: c.max_pre_ping.map(|s| Duration::seconds(s as i64)),
+            })
+            .collect())
+    }
 }

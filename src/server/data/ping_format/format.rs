@@ -87,4 +87,12 @@ impl<'a> PingFormatRepository<'a> {
 
         Ok(count > 0)
     }
+
+    /// Gets the count of fleet categories using a specific ping format
+    pub async fn get_fleet_category_count(&self, ping_format_id: i32) -> Result<u64, DbErr> {
+        entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::PingFormatId.eq(ping_format_id))
+            .count(self.db)
+            .await
+    }
 }
