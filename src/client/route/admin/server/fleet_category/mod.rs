@@ -2,6 +2,10 @@ mod duration;
 mod form_fields;
 mod modals;
 mod table;
+mod tabs;
+mod types;
+
+pub use types::{FormFieldsData, ValidationErrorsData};
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing;

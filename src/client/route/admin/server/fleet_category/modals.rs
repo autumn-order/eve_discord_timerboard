@@ -6,7 +6,8 @@ use crate::{client::component::FullScreenModal, model::ping_format::PingFormatDt
 
 use super::{
     duration::{format_duration, parse_duration, validate_duration_input},
-    form_fields::{FleetCategoryFormFields, FormFieldsData, ValidationErrorsData},
+    form_fields::FleetCategoryFormFields,
+    FormFieldsData, ValidationErrorsData,
 };
 
 #[cfg(feature = "web")]
