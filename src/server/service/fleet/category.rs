@@ -27,7 +27,7 @@ impl<'a> FleetCategoryService<'a> {
     ) -> Result<FleetCategoryDto, AppError> {
         let repo = FleetCategoryRepository::new(self.db);
 
-        let category = repo
+        let (category, ping_format) = repo
             .create(
                 guild_id,
                 ping_format_id,
@@ -42,6 +42,9 @@ impl<'a> FleetCategoryService<'a> {
             id: category.id,
             guild_id: category.guild_id,
             ping_format_id: category.ping_format_id,
+            ping_format_name: ping_format
+                .map(|pf| pf.name)
+                .unwrap_or_else(|| "Unknown".to_string()),
             name: category.name,
             ping_lead_time: category.ping_cooldown.map(|s| Duration::seconds(s as i64)),
             ping_reminder: category.ping_reminder.map(|s| Duration::seconds(s as i64)),
@@ -71,10 +74,13 @@ impl<'a> FleetCategoryService<'a> {
         Ok(PaginatedFleetCategoriesDto {
             categories: categories
                 .into_iter()
-                .map(|c| FleetCategoryDto {
+                .map(|(c, ping_format)| FleetCategoryDto {
                     id: c.id,
                     guild_id: c.guild_id,
                     ping_format_id: c.ping_format_id,
+                    ping_format_name: ping_format
+                        .map(|pf| pf.name)
+                        .unwrap_or_else(|| "Unknown".to_string()),
                     name: c.name,
                     ping_lead_time: c.ping_cooldown.map(|s| Duration::seconds(s as i64)),
                     ping_reminder: c.ping_reminder.map(|s| Duration::seconds(s as i64)),
@@ -107,7 +113,7 @@ impl<'a> FleetCategoryService<'a> {
             return Ok(None);
         }
 
-        let category = repo
+        let (category, ping_format) = repo
             .update(
                 id,
                 ping_format_id,
@@ -122,6 +128,9 @@ impl<'a> FleetCategoryService<'a> {
             id: category.id,
             guild_id: category.guild_id,
             ping_format_id: category.ping_format_id,
+            ping_format_name: ping_format
+                .map(|pf| pf.name)
+                .unwrap_or_else(|| "Unknown".to_string()),
             name: category.name,
             ping_lead_time: category.ping_cooldown.map(|s| Duration::seconds(s as i64)),
             ping_reminder: category.ping_reminder.map(|s| Duration::seconds(s as i64)),

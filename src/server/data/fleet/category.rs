@@ -13,7 +13,7 @@ impl<'a> FleetCategoryRepository<'a> {
         Self { db }
     }
 
-    /// Creates a new fleet category
+    /// Creates a new fleet category and returns it with related ping format
     pub async fn create(
         &self,
         guild_id: i64,
@@ -22,8 +22,14 @@ impl<'a> FleetCategoryRepository<'a> {
         ping_lead_time: Option<Duration>,
         ping_reminder: Option<Duration>,
         max_pre_ping: Option<Duration>,
-    ) -> Result<entity::fleet_category::Model, DbErr> {
-        entity::fleet_category::ActiveModel {
+    ) -> Result<
+        (
+            entity::fleet_category::Model,
+            Option<entity::ping_format::Model>,
+        ),
+        DbErr,
+    > {
+        let category = entity::fleet_category::ActiveModel {
             guild_id: ActiveValue::Set(guild_id),
             ping_format_id: ActiveValue::Set(ping_format_id),
             name: ActiveValue::Set(name),
@@ -33,24 +39,56 @@ impl<'a> FleetCategoryRepository<'a> {
             ..Default::default()
         }
         .insert(self.db)
-        .await
+        .await?;
+
+        // Fetch with related ping format
+        let result = entity::prelude::FleetCategory::find_by_id(category.id)
+            .find_also_related(entity::prelude::PingFormat)
+            .one(self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound(format!(
+                "Fleet category with id {} not found after creation",
+                category.id
+            )))?;
+
+        Ok(result)
     }
 
-    /// Gets a fleet category by ID
-    pub async fn get_by_id(&self, id: i32) -> Result<Option<entity::fleet_category::Model>, DbErr> {
+    /// Gets a fleet category by ID with related ping format
+    pub async fn get_by_id(
+        &self,
+        id: i32,
+    ) -> Result<
+        Option<(
+            entity::fleet_category::Model,
+            Option<entity::ping_format::Model>,
+        )>,
+        DbErr,
+    > {
         entity::prelude::FleetCategory::find_by_id(id)
+            .find_also_related(entity::prelude::PingFormat)
             .one(self.db)
             .await
     }
 
-    /// Gets paginated fleet categories for a guild
+    /// Gets paginated fleet categories for a guild with related ping format
     pub async fn get_by_guild_id_paginated(
         &self,
         guild_id: i64,
         page: u64,
         per_page: u64,
-    ) -> Result<(Vec<entity::fleet_category::Model>, u64), DbErr> {
+    ) -> Result<
+        (
+            Vec<(
+                entity::fleet_category::Model,
+                Option<entity::ping_format::Model>,
+            )>,
+            u64,
+        ),
+        DbErr,
+    > {
         let paginator = entity::prelude::FleetCategory::find()
+            .find_also_related(entity::prelude::PingFormat)
             .filter(entity::fleet_category::Column::GuildId.eq(guild_id))
             .order_by_asc(entity::fleet_category::Column::Name)
             .paginate(self.db, per_page);
@@ -61,7 +99,7 @@ impl<'a> FleetCategoryRepository<'a> {
         Ok((categories, total))
     }
 
-    /// Updates a fleet category's name and duration fields
+    /// Updates a fleet category's name and duration fields and returns it with related ping format
     pub async fn update(
         &self,
         id: i32,
@@ -70,7 +108,13 @@ impl<'a> FleetCategoryRepository<'a> {
         ping_lead_time: Option<Duration>,
         ping_reminder: Option<Duration>,
         max_pre_ping: Option<Duration>,
-    ) -> Result<entity::fleet_category::Model, DbErr> {
+    ) -> Result<
+        (
+            entity::fleet_category::Model,
+            Option<entity::ping_format::Model>,
+        ),
+        DbErr,
+    > {
         let category = entity::prelude::FleetCategory::find_by_id(id)
             .one(self.db)
             .await?
@@ -88,7 +132,19 @@ impl<'a> FleetCategoryRepository<'a> {
             ActiveValue::Set(ping_reminder.map(|d| d.num_seconds() as i32));
         active_model.max_pre_ping = ActiveValue::Set(max_pre_ping.map(|d| d.num_seconds() as i32));
 
-        active_model.update(self.db).await
+        active_model.update(self.db).await?;
+
+        // Fetch with related ping format
+        let result = entity::prelude::FleetCategory::find_by_id(id)
+            .find_also_related(entity::prelude::PingFormat)
+            .one(self.db)
+            .await?
+            .ok_or(DbErr::RecordNotFound(format!(
+                "Fleet category with id {} not found after update",
+                id
+            )))?;
+
+        Ok(result)
     }
 
     /// Deletes a fleet category

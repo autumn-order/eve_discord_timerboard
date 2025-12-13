@@ -72,6 +72,7 @@ pub fn FleetCategoriesTable(
                 thead {
                     tr {
                         th { "Name" }
+                        th { "Ping Format" }
                         th { class: "text-center", "Upcoming Fleets" }
                         th { class: "text-center", "All-time Total" }
                         th { class: "text-center", "Configured Roles" }
@@ -91,6 +92,7 @@ pub fn FleetCategoriesTable(
                             rsx! {
                                 tr {
                                     td { "{category.name}" }
+                                    td { "{category.ping_format_name}" }
                                     td { class: "text-center", "0" }
                                     td { class: "text-center", "0" }
                                     td { class: "text-center", "0" }

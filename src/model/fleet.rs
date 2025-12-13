@@ -6,6 +6,7 @@ pub struct FleetCategoryDto {
     pub id: i32,
     pub guild_id: i64,
     pub ping_format_id: i32,
+    pub ping_format_name: String,
     pub name: String,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,

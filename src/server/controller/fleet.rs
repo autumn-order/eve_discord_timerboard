@@ -112,6 +112,7 @@ pub async fn update_fleet_category(
                 id: 0,
                 guild_id: 0,
                 ping_format_id: 0,
+                ping_format_name: String::new(),
                 name: String::new(),
                 ping_lead_time: None,
                 ping_reminder: None,
