@@ -152,7 +152,7 @@ pub fn SelectedItemsList(
                 class: if is_empty {
                     "space-y-2"
                 } else {
-                    "space-y-2 max-h-96 overflow-y-auto border border-base-300 rounded-lg p-2 bg-base-200"
+                    "space-y-2 max-h-96 overflow-y-auto border border-base-300 rounded-box p-2 bg-base-200"
                 },
                 if is_empty {
                     div {
@@ -180,7 +180,7 @@ pub fn SelectedItem(
 ) -> Element {
     rsx! {
         div {
-            class: "flex items-center gap-3 p-3 bg-base-100 rounded-lg",
+            class: "flex items-center gap-3 p-3 bg-base-100 rounded-box",
             {children}
             button {
                 r#type: "button",
