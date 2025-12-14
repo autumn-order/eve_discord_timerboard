@@ -5,8 +5,8 @@ use sea_orm::{
 use std::collections::HashMap;
 
 use crate::server::model::category::{
-    CreateFleetCategoryParams, FleetCategoryWithCounts, FleetCategoryWithFormat,
-    FleetCategoryWithRelations, UpdateFleetCategoryParams,
+    CreateFleetCategoryParams, FleetCategoryWithCounts, FleetCategoryWithRelations,
+    UpdateFleetCategoryParams,
 };
 
 pub struct FleetCategoryRepository<'a> {
@@ -22,7 +22,7 @@ impl<'a> FleetCategoryRepository<'a> {
     pub async fn create(
         &self,
         params: CreateFleetCategoryParams,
-    ) -> Result<FleetCategoryWithFormat, DbErr> {
+    ) -> Result<entity::fleet_category::Model, DbErr> {
         let category = entity::fleet_category::ActiveModel {
             guild_id: ActiveValue::Set(params.guild_id.to_string()),
             ping_format_id: ActiveValue::Set(params.ping_format_id),
@@ -71,20 +71,7 @@ impl<'a> FleetCategoryRepository<'a> {
             .await?;
         }
 
-        // Fetch with related ping format
-        let result = entity::prelude::FleetCategory::find_by_id(category.id)
-            .find_also_related(entity::prelude::PingFormat)
-            .one(self.db)
-            .await?
-            .ok_or(DbErr::RecordNotFound(format!(
-                "Fleet category with id {} not found after creation",
-                category.id
-            )))?;
-
-        Ok(FleetCategoryWithFormat {
-            category: result.0,
-            ping_format: result.1,
-        })
+        Ok(category)
     }
 
     /// Gets a fleet category by ID with related ping format and all related entities with enriched data
@@ -265,7 +252,7 @@ impl<'a> FleetCategoryRepository<'a> {
     pub async fn update(
         &self,
         params: UpdateFleetCategoryParams,
-    ) -> Result<FleetCategoryWithFormat, DbErr> {
+    ) -> Result<entity::fleet_category::Model, DbErr> {
         let category = entity::prelude::FleetCategory::find_by_id(params.id)
             .one(self.db)
             .await?
@@ -284,7 +271,7 @@ impl<'a> FleetCategoryRepository<'a> {
         active_model.max_pre_ping =
             ActiveValue::Set(params.max_pre_ping.map(|d| d.num_seconds() as i32));
 
-        active_model.update(self.db).await?;
+        let updated_category = active_model.update(self.db).await?;
 
         // Delete existing related entities
         entity::prelude::FleetCategoryAccessRole::delete_many()
@@ -338,20 +325,7 @@ impl<'a> FleetCategoryRepository<'a> {
             .await?;
         }
 
-        // Fetch with related ping format
-        let result = entity::prelude::FleetCategory::find_by_id(params.id)
-            .find_also_related(entity::prelude::PingFormat)
-            .one(self.db)
-            .await?
-            .ok_or(DbErr::RecordNotFound(format!(
-                "Fleet category with id {} not found after update",
-                params.id
-            )))?;
-
-        Ok(FleetCategoryWithFormat {
-            category: result.0,
-            ping_format: result.1,
-        })
+        Ok(updated_category)
     }
 
     /// Deletes a fleet category

@@ -25,11 +25,11 @@ impl<'a> FleetCategoryService<'a> {
     ) -> Result<FleetCategory, AppError> {
         let repo = FleetCategoryRepository::new(self.db);
 
-        let result = repo.create(params).await?;
+        let category = repo.create(params).await?;
 
         // Fetch full category with relations
         let full_result = repo
-            .get_by_id(result.category.id)
+            .get_by_id(category.id)
             .await?
             .ok_or_else(|| AppError::NotFound("Category not found after creation".to_string()))?;
 
@@ -94,7 +94,7 @@ impl<'a> FleetCategoryService<'a> {
             return Ok(None);
         }
 
-        let _result = repo.update(params.clone()).await?;
+        let _category = repo.update(params.clone()).await?;
 
         // Fetch full category with relations
         let full_result = repo.get_by_id(params.id).await?;

@@ -238,13 +238,6 @@ pub struct FleetCategoryWithRelations {
     )>,
 }
 
-/// Result from repository when fetching category with basic info and ping format
-#[derive(Debug, Clone)]
-pub struct FleetCategoryWithFormat {
-    pub category: entity::fleet_category::Model,
-    pub ping_format: Option<entity::ping_format::Model>,
-}
-
 /// Result from repository when fetching paginated categories with counts
 #[derive(Debug, Clone)]
 pub struct FleetCategoryWithCounts {
