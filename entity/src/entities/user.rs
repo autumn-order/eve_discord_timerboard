@@ -7,11 +7,11 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     #[sea_orm(unique)]
-    pub discord_id: i64,
+    pub discord_id: i32,
     pub name: String,
     pub admin: bool,
-    pub last_guild_sync_at: DateTime,
-    pub last_role_sync_at: DateTime,
+    pub last_guild_sync_at: DateTimeUtc,
+    pub last_role_sync_at: DateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

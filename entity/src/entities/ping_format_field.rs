@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub ping_format_id: i64,
+    pub ping_format_id: i32,
     pub name: String,
     pub priority: i32,
 }

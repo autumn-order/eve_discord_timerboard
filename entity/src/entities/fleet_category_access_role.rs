@@ -7,7 +7,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub fleet_category_id: i32,
-    pub role_id: i64,
+    pub role_id: String,
     pub can_view: bool,
     pub can_create: bool,
     pub can_manage: bool,

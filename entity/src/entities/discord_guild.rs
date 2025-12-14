@@ -7,7 +7,7 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     #[sea_orm(unique)]
-    pub guild_id: i64,
+    pub guild_id: String,
     pub name: String,
     pub icon_hash: Option<String>,
 }

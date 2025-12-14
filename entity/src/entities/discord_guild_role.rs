@@ -6,9 +6,9 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub guild_id: i64,
+    pub guild_id: String,
     #[sea_orm(unique)]
-    pub role_id: i64,
+    pub role_id: String,
     pub name: String,
     pub color: String,
     pub position: i16,
