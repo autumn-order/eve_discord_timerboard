@@ -15,20 +15,20 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// Does not check if the relationship already exists.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
-    /// - `role_id`: Discord role ID
+    /// - `user_id`: Discord user ID (u64)
+    /// - `role_id`: Discord role ID (u64)
     ///
     /// # Returns
     /// - `Ok(Model)`: The created user-guild-role relationship
     /// - `Err(DbErr)`: Database error (e.g., foreign key constraint violation)
     pub async fn create(
         &self,
-        user_id: i32,
+        user_id: u64,
         role_id: u64,
     ) -> Result<entity::user_discord_guild_role::Model, DbErr> {
         entity::prelude::UserDiscordGuildRole::insert(
             entity::user_discord_guild_role::ActiveModel {
-                user_id: ActiveValue::Set(user_id),
+                user_id: ActiveValue::Set(user_id.to_string()),
                 role_id: ActiveValue::Set(role_id.to_string()),
                 ..Default::default()
             },
@@ -43,7 +43,7 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// relationships before creating new ones to avoid duplicates.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     /// - `role_ids`: Slice of Discord role IDs
     ///
     /// # Returns
@@ -51,16 +51,17 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// - `Err(DbErr)`: Database error during creation
     pub async fn create_many(
         &self,
-        user_id: i32,
+        user_id: u64,
         role_ids: &[u64],
     ) -> Result<Vec<entity::user_discord_guild_role::Model>, DbErr> {
         let mut results = Vec::new();
 
+        let user_id_str = user_id.to_string();
         for role_id in role_ids {
             // Check if relationship already exists
             let role_id_str = role_id.to_string();
             let exists = entity::prelude::UserDiscordGuildRole::find()
-                .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id))
+                .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id_str.as_str()))
                 .filter(entity::user_discord_guild_role::Column::RoleId.eq(role_id_str.as_str()))
                 .one(self.db)
                 .await?;
@@ -80,14 +81,14 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// user data or when re-syncing all of a user's roles from scratch.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     ///
     /// # Returns
     /// - `Ok(())`: All relationships successfully deleted
     /// - `Err(DbErr)`: Database error during deletion
-    pub async fn delete_by_user(&self, user_id: i32) -> Result<(), DbErr> {
+    pub async fn delete_by_user(&self, user_id: u64) -> Result<(), DbErr> {
         entity::prelude::UserDiscordGuildRole::delete_many()
-            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id))
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
             .exec(self.db)
             .await?;
         Ok(())
@@ -99,16 +100,17 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// Called when a user loses a role in Discord.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
-    /// - `role_id`: Discord role ID
+    /// - `user_id`: Discord user ID (u64)
+    /// - `role_id`: Discord role ID (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Relationship successfully deleted
     /// - `Err(DbErr)`: Database error during deletion
-    pub async fn delete(&self, user_id: i32, role_id: u64) -> Result<(), DbErr> {
+    pub async fn delete(&self, user_id: u64, role_id: u64) -> Result<(), DbErr> {
+        let user_id_str = user_id.to_string();
         let role_id_str = role_id.to_string();
         entity::prelude::UserDiscordGuildRole::delete_many()
-            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id))
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id_str.as_str()))
             .filter(entity::user_discord_guild_role::Column::RoleId.eq(role_id_str.as_str()))
             .exec(self.db)
             .await?;
@@ -121,13 +123,13 @@ impl<'a> UserDiscordGuildRoleRepository<'a> {
     /// all existing role relationships, then creates new ones for the provided Discord role IDs.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     /// - `role_ids`: Slice of Discord role IDs the user should have
     ///
     /// # Returns
     /// - `Ok(())`: Sync completed successfully
     /// - `Err(DbErr)`: Database error during deletion or creation
-    pub async fn sync_user_roles(&self, user_id: i32, role_ids: &[u64]) -> Result<(), DbErr> {
+    pub async fn sync_user_roles(&self, user_id: u64, role_ids: &[u64]) -> Result<(), DbErr> {
         // Delete all existing role relationships for this user
         self.delete_by_user(user_id).await?;
 

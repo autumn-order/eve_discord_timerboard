@@ -5,11 +5,9 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "discord_guild_role")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub guild_id: String,
-    #[sea_orm(unique)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub role_id: String,
+    pub guild_id: String,
     pub name: String,
     pub color: String,
     pub position: i16,
@@ -54,6 +52,19 @@ impl Related<super::fleet_category_ping_role::Entity> for Entity {
 impl Related<super::user_discord_guild_role::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserDiscordGuildRole.def()
+    }
+}
+
+impl Related<super::user::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::user_discord_guild_role::Relation::User.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::user_discord_guild_role::Relation::DiscordGuildRole
+                .def()
+                .rev(),
+        )
     }
 }
 

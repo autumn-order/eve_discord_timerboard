@@ -13,8 +13,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(DiscordGuild::Table)
                     .if_not_exists()
-                    .col(pk_auto(DiscordGuild::Id))
-                    .col(string_uniq(DiscordGuild::GuildId))
+                    .col(string_uniq(DiscordGuild::GuildId).primary_key())
                     .col(string(DiscordGuild::Name))
                     .col(string_null(DiscordGuild::IconHash))
                     .to_owned(),
@@ -33,7 +32,6 @@ impl MigrationTrait for Migration {
 
 pub enum DiscordGuild {
     Table,
-    Id,
     GuildId,
     Name,
     IconHash,

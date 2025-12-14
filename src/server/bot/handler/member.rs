@@ -53,7 +53,15 @@ pub async fn handle_guild_member_addition(
         }
     };
 
-    if let Err(e) = user_guild_repo.create(user.id, guild_id_u64).await {
+    let user_id = match user.discord_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::error!("Failed to parse user discord_id: {:?}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = user_guild_repo.create(user_id, guild_id_u64).await {
         tracing::error!("Failed to create user-guild relationship: {:?}", e);
     } else {
         tracing::info!(
@@ -116,7 +124,15 @@ pub async fn handle_guild_member_removal(
         }
     };
 
-    if let Err(e) = user_guild_repo.delete(user.id, guild_id_u64).await {
+    let user_id = match user.discord_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::error!("Failed to parse user discord_id: {:?}", e);
+            return;
+        }
+    };
+
+    if let Err(e) = user_guild_repo.delete(user_id, guild_id_u64).await {
         tracing::error!("Failed to delete user-guild relationship: {:?}", e);
     } else {
         tracing::info!(
@@ -157,11 +173,19 @@ pub async fn handle_guild_member_update(
     };
 
     // Sync user's role memberships
+    let user_id = match user.discord_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::error!("Failed to parse user discord_id: {:?}", e);
+            return;
+        }
+    };
+
     let user_role_service = UserDiscordGuildRoleService::new(db);
-    if let Err(e) = user_role_service.sync_user_roles(user.id, &member).await {
+    if let Err(e) = user_role_service.sync_user_roles(user_id, &member).await {
         tracing::error!(
             "Failed to sync roles for user {} in guild {}: {:?}",
-            user.id,
+            user.discord_id,
             guild_id,
             e
         );

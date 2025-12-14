@@ -150,13 +150,18 @@ impl<'a> AuthService<'a> {
     ) -> Result<(), AppError> {
         let user_guild_ids: Vec<GuildId> = user_guilds.iter().map(|g| g.id).collect();
 
+        let user_id = user
+            .discord_id
+            .parse::<u64>()
+            .map_err(|e| AppError::InternalError(format!("Failed to parse user_id: {}", e)))?;
+
         let user_guild_service = UserDiscordGuildService::new(self.db);
         user_guild_service
-            .sync_user_guilds(user.id, user.discord_id as u64, &user_guild_ids)
+            .sync_user_guilds(user_id, &user_guild_ids)
             .await?;
 
         let user_repo = UserRepository::new(self.db);
-        user_repo.update_guild_sync_timestamp(user.id).await?;
+        user_repo.update_guild_sync_timestamp(user_id).await?;
 
         Ok(())
     }
@@ -172,6 +177,11 @@ impl<'a> AuthService<'a> {
         let guild_repo = DiscordGuildRepository::new(self.db);
         let bot_guilds = guild_repo.get_all().await?;
 
+        let user_id = user
+            .discord_id
+            .parse::<u64>()
+            .map_err(|e| AppError::InternalError(format!("Failed to parse user_id: {}", e)))?;
+
         let user_role_service = UserDiscordGuildRoleService::new(self.db);
         for guild in user_guilds {
             if bot_guilds.iter().any(|bot_guild| {
@@ -182,10 +192,10 @@ impl<'a> AuthService<'a> {
                     .unwrap_or(false)
             }) {
                 if let Ok(member) = self.fetch_guild_member(token, guild.id).await {
-                    if let Err(e) = user_role_service.sync_user_roles(user.id, &member).await {
+                    if let Err(e) = user_role_service.sync_user_roles(user_id, &member).await {
                         tracing::warn!(
                             "Failed to sync roles for user {} in guild {}: {:?}",
-                            user.id,
+                            user.discord_id,
                             guild.id,
                             e
                         );
@@ -195,7 +205,7 @@ impl<'a> AuthService<'a> {
         }
 
         let user_repo = UserRepository::new(self.db);
-        user_repo.update_role_sync_timestamp(user.id).await?;
+        user_repo.update_role_sync_timestamp(user_id).await?;
 
         Ok(())
     }

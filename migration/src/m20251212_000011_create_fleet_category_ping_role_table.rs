@@ -14,7 +14,6 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(FleetCategoryPingRole::Table)
                     .if_not_exists()
-                    .col(pk_auto(FleetCategoryPingRole::Id))
                     .col(integer(FleetCategoryPingRole::FleetCategoryId))
                     .col(string(FleetCategoryPingRole::RoleId))
                     .foreign_key(
@@ -36,6 +35,11 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .primary_key(
+                        Index::create()
+                            .col(FleetCategoryPingRole::FleetCategoryId)
+                            .col(FleetCategoryPingRole::RoleId),
+                    )
                     .to_owned(),
             )
             .await
@@ -51,7 +55,6 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum FleetCategoryPingRole {
     Table,
-    Id,
     FleetCategoryId,
     RoleId,
 }

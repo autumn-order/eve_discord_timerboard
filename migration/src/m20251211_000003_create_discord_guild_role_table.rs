@@ -15,9 +15,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(DiscordGuildRole::Table)
                     .if_not_exists()
-                    .col(pk_auto(DiscordGuildRole::Id))
+                    .col(string(DiscordGuildRole::RoleId).primary_key())
                     .col(string(DiscordGuildRole::GuildId))
-                    .col(string_uniq(DiscordGuildRole::RoleId))
                     .col(string(DiscordGuildRole::Name))
                     .col(string(DiscordGuildRole::Color))
                     .col(small_unsigned(DiscordGuildRole::Position))
@@ -45,9 +44,8 @@ impl MigrationTrait for Migration {
 
 pub enum DiscordGuildRole {
     Table,
-    Id,
-    GuildId,
     RoleId,
+    GuildId,
     Name,
     Color,
     Position,

@@ -5,10 +5,8 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "user")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(unique)]
-    pub discord_id: i32,
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub discord_id: String,
     pub name: String,
     pub admin: bool,
     pub last_guild_sync_at: DateTimeUtc,
@@ -32,6 +30,24 @@ impl Related<super::user_discord_guild::Entity> for Entity {
 impl Related<super::user_discord_guild_role::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserDiscordGuildRole.def()
+    }
+}
+
+impl Related<super::discord_guild::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::user_discord_guild::Relation::DiscordGuild.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::user_discord_guild::Relation::User.def().rev())
+    }
+}
+
+impl Related<super::discord_guild_role::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::user_discord_guild_role::Relation::DiscordGuildRole.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(super::user_discord_guild_role::Relation::User.def().rev())
     }
 }
 

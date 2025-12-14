@@ -27,11 +27,15 @@ impl<'a> AuthGuard<'a> {
     ) -> Result<entity::user::Model, AppError> {
         let user_repo = UserRepository::new(self.db);
 
-        let Some(user_id) = self.session.get::<i32>(SESSION_AUTH_USER_ID).await? else {
+        let Some(user_id_str) = self.session.get::<String>(SESSION_AUTH_USER_ID).await? else {
             return Err(AuthError::UserNotInSession.into());
         };
 
-        let Some(user) = user_repo.find_by_id(user_id).await? else {
+        let user_id = user_id_str.parse::<u64>().map_err(|e| {
+            AppError::InternalError(format!("Failed to parse user_id from session: {}", e))
+        })?;
+
+        let Some(user) = user_repo.find_by_discord_id(user_id).await? else {
             return Err(AuthError::UserNotInDatabase(user_id).into());
         };
 

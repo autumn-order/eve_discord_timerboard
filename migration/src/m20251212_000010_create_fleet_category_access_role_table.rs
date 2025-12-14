@@ -14,7 +14,6 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(FleetCategoryAccessRole::Table)
                     .if_not_exists()
-                    .col(pk_auto(FleetCategoryAccessRole::Id))
                     .col(integer(FleetCategoryAccessRole::FleetCategoryId))
                     .col(string(FleetCategoryAccessRole::RoleId))
                     .col(boolean(FleetCategoryAccessRole::CanView).default(true))
@@ -42,6 +41,11 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .primary_key(
+                        Index::create()
+                            .col(FleetCategoryAccessRole::FleetCategoryId)
+                            .col(FleetCategoryAccessRole::RoleId),
+                    )
                     .to_owned(),
             )
             .await
@@ -61,7 +65,6 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum FleetCategoryAccessRole {
     Table,
-    Id,
     FleetCategoryId,
     RoleId,
     CanView,

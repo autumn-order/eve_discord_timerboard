@@ -14,7 +14,6 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(FleetCategoryChannel::Table)
                     .if_not_exists()
-                    .col(pk_auto(FleetCategoryChannel::Id))
                     .col(integer(FleetCategoryChannel::FleetCategoryId))
                     .col(string(FleetCategoryChannel::ChannelId))
                     .foreign_key(
@@ -36,6 +35,11 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
+                    .primary_key(
+                        Index::create()
+                            .col(FleetCategoryChannel::FleetCategoryId)
+                            .col(FleetCategoryChannel::ChannelId),
+                    )
                     .to_owned(),
             )
             .await
@@ -51,7 +55,6 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum FleetCategoryChannel {
     Table,
-    Id,
     FleetCategoryId,
     ChannelId,
 }

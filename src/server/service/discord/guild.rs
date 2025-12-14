@@ -26,7 +26,6 @@ impl<'a> DiscordGuildService<'a> {
                     AppError::InternalError(format!("Failed to parse guild_id: {}", e))
                 })?;
                 Ok(DiscordGuildDto {
-                    id: g.id,
                     guild_id,
                     name: g.name,
                     icon_hash: g.icon_hash,
@@ -51,7 +50,6 @@ impl<'a> DiscordGuildService<'a> {
                     AppError::InternalError(format!("Failed to parse guild_id: {}", e))
                 })?;
                 Ok(DiscordGuildDto {
-                    id: g.id,
                     guild_id,
                     name: g.name,
                     icon_hash: g.icon_hash,

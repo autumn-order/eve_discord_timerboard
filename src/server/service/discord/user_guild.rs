@@ -26,8 +26,7 @@ impl<'a> UserDiscordGuildService<'a> {
     /// guild memberships for the user.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
-    /// - `discord_user_id`: Discord's unique identifier for the user (for logging)
+    /// - `user_id`: Discord user ID (u64)
     /// - `user_guild_ids`: Slice of Discord guild IDs the user is a member of
     ///
     /// # Returns
@@ -35,8 +34,7 @@ impl<'a> UserDiscordGuildService<'a> {
     /// - `Err(AppError)`: Database error during guild query or sync
     pub async fn sync_user_guilds(
         &self,
-        user_id: i32,
-        discord_user_id: u64,
+        user_id: u64,
         user_guild_ids: &[GuildId],
     ) -> Result<(), AppError> {
         let guild_repo = DiscordGuildRepository::new(self.db);
@@ -73,7 +71,7 @@ impl<'a> UserDiscordGuildService<'a> {
         tracing::debug!(
             "Synced {} guild memberships for user {} (guilds: {:?})",
             matching_discord_guild_ids.len(),
-            discord_user_id,
+            user_id,
             matching_discord_guild_ids
         );
 
@@ -122,7 +120,7 @@ impl<'a> UserDiscordGuildService<'a> {
                 entity::user::Column::DiscordId.is_in(
                     member_discord_ids
                         .iter()
-                        .map(|id| *id as i64)
+                        .map(|id| id.to_string())
                         .collect::<Vec<_>>(),
                 ),
             )
@@ -145,28 +143,37 @@ impl<'a> UserDiscordGuildService<'a> {
             .parse::<u64>()
             .map_err(|e| AppError::InternalError(format!("Failed to parse guild_id: {}", e)))?;
         let existing_relationships = user_guild_repo.get_users_by_guild(guild_id_u64).await?;
-        let existing_user_ids: std::collections::HashSet<i32> =
-            existing_relationships.iter().map(|r| r.user_id).collect();
+        let existing_user_ids: std::collections::HashSet<String> = existing_relationships
+            .iter()
+            .map(|r| r.user_id.clone())
+            .collect();
 
-        let logged_in_user_ids: std::collections::HashSet<i32> =
-            logged_in_members.iter().map(|u| u.id).collect();
+        let logged_in_user_ids: std::collections::HashSet<String> = logged_in_members
+            .iter()
+            .map(|u| u.discord_id.clone())
+            .collect();
 
         // Collect synced user IDs before moving logged_in_members
-        let synced_user_ids: Vec<i32> = logged_in_members.iter().map(|u| u.id).collect();
+        let synced_user_ids: Vec<u64> = logged_in_members
+            .iter()
+            .filter_map(|u| u.discord_id.parse::<u64>().ok())
+            .collect();
 
         // Remove relationships for users who are no longer in the guild
         for relationship in existing_relationships {
             if !logged_in_user_ids.contains(&relationship.user_id) {
-                user_guild_repo
-                    .delete(relationship.user_id, guild_id_u64)
-                    .await?;
+                if let Ok(user_id) = relationship.user_id.parse::<u64>() {
+                    user_guild_repo.delete(user_id, guild_id_u64).await?;
+                }
             }
         }
 
         // Add relationships for users who are in the guild but not in our database
         for user in logged_in_members {
-            if !existing_user_ids.contains(&user.id) {
-                user_guild_repo.create(user.id, guild_id_u64).await?;
+            if !existing_user_ids.contains(&user.discord_id) {
+                if let Ok(user_id) = user.discord_id.parse::<u64>() {
+                    user_guild_repo.create(user_id, guild_id_u64).await?;
+                }
             }
         }
 

@@ -26,9 +26,9 @@ pub enum AuthError {
     #[error("User not found in session")]
     UserNotInSession,
     #[error("User {0} not found in database")]
-    UserNotInDatabase(i32),
+    UserNotInDatabase(u64),
     #[error("Access denied for user {0}: {1}")]
-    AccessDenied(i32, String),
+    AccessDenied(u64, String),
     #[error(transparent)]
     RequestTokenErr(
         #[from]

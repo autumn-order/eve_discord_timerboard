@@ -13,9 +13,8 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(DiscordGuildChannel::Table)
                     .if_not_exists()
-                    .col(pk_auto(DiscordGuildChannel::Id))
+                    .col(string(DiscordGuildChannel::ChannelId).primary_key())
                     .col(string(DiscordGuildChannel::GuildId))
-                    .col(string_uniq(DiscordGuildChannel::ChannelId))
                     .col(string(DiscordGuildChannel::Name))
                     .col(integer(DiscordGuildChannel::Position))
                     .foreign_key(
@@ -41,9 +40,8 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum DiscordGuildChannel {
     Table,
-    Id,
-    GuildId,
     ChannelId,
+    GuildId,
     Name,
     Position,
 }

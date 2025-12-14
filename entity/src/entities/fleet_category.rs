@@ -71,4 +71,17 @@ impl Related<super::ping_format::Entity> for Entity {
     }
 }
 
+impl Related<super::discord_guild_channel::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::fleet_category_channel::Relation::DiscordGuildChannel.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::fleet_category_channel::Relation::FleetCategory
+                .def()
+                .rev(),
+        )
+    }
+}
+
 impl ActiveModelBehavior for ActiveModel {}

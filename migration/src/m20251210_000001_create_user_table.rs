@@ -13,8 +13,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(User::Table)
                     .if_not_exists()
-                    .col(pk_auto(User::Id))
-                    .col(big_unsigned_uniq(User::DiscordId))
+                    .col(string_uniq(User::DiscordId).primary_key())
                     .col(string(User::Name))
                     .col(boolean(User::Admin))
                     .col(
@@ -43,7 +42,6 @@ impl MigrationTrait for Migration {
 
 pub enum User {
     Table,
-    Id,
     DiscordId,
     Name,
     Admin,

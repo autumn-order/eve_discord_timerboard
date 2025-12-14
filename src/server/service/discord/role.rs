@@ -77,7 +77,6 @@ impl<'a> DiscordGuildRoleService<'a> {
                     AppError::InternalError(format!("Failed to parse role_id: {}", e))
                 })?;
                 Ok(DiscordGuildRoleDto {
-                    id: role.id,
                     guild_id,
                     role_id,
                     name: role.name,

@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct DiscordGuildDto {
-    pub id: i32,
     #[serde(
         serialize_with = "serialize_u64_as_string",
         deserialize_with = "deserialize_u64_from_string"
@@ -14,7 +13,6 @@ pub struct DiscordGuildDto {
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct DiscordGuildRoleDto {
-    pub id: i32,
     #[serde(
         serialize_with = "serialize_u64_as_string",
         deserialize_with = "deserialize_u64_from_string"
@@ -32,7 +30,6 @@ pub struct DiscordGuildRoleDto {
 
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct DiscordGuildChannelDto {
-    pub id: i32,
     #[serde(
         serialize_with = "serialize_u64_as_string",
         deserialize_with = "deserialize_u64_from_string"

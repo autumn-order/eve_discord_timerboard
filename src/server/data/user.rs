@@ -27,12 +27,8 @@ impl<'a> UserRepository<'a> {
             update_columns.push(entity::user::Column::Admin);
         }
 
-        // Convert u64 to i32 - Note: This may overflow for very large Discord IDs
-        // TODO: Migrate user.discord_id to String type like other Discord ID fields
-        let discord_id_i32 = user.id.get() as i32;
-
         entity::prelude::User::insert(entity::user::ActiveModel {
-            discord_id: ActiveValue::Set(discord_id_i32),
+            discord_id: ActiveValue::Set(user.id.get().to_string()),
             name: ActiveValue::Set(user.name),
             admin: ActiveValue::Set(is_admin.unwrap_or(false)),
             ..Default::default()
@@ -48,34 +44,11 @@ impl<'a> UserRepository<'a> {
         .await
     }
 
-    pub async fn find_by_id(&self, user_id: i32) -> Result<Option<entity::user::Model>, DbErr> {
-        entity::prelude::User::find_by_id(user_id)
-            .one(self.db)
-            .await
-    }
-
-    /// Finds a user by their Discord ID
-    ///
-    /// Searches for a user in the database using their Discord-assigned user ID.
-    /// Used to check if a Discord user has logged into the application.
-    ///
-    /// # Arguments
-    /// - `discord_id`: Discord's unique identifier for the user (u64)
-    ///
-    /// # Returns
-    /// - `Ok(Some(Model))`: User found in database (has logged in)
-    /// - `Ok(None)`: User not found (has not logged into the app)
-    /// - `Err(DbErr)`: Database error during query
     pub async fn find_by_discord_id(
         &self,
-        discord_id: u64,
+        user_id: u64,
     ) -> Result<Option<entity::user::Model>, DbErr> {
-        // Convert u64 to i32 - Note: This may overflow for very large Discord IDs
-        // TODO: Migrate user.discord_id to String type like other Discord ID fields
-        let discord_id_i32 = discord_id as i32;
-
-        entity::prelude::User::find()
-            .filter(entity::user::Column::DiscordId.eq(discord_id_i32))
+        entity::prelude::User::find_by_id(user_id.to_string())
             .one(self.db)
             .await
     }
@@ -101,14 +74,14 @@ impl<'a> UserRepository<'a> {
     /// Used after successfully syncing a user's guild memberships.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord ID of the user (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Timestamp updated successfully
     /// - `Err(DbErr)`: Database error during update
-    pub async fn update_guild_sync_timestamp(&self, user_id: i32) -> Result<(), DbErr> {
+    pub async fn update_guild_sync_timestamp(&self, user_id: u64) -> Result<(), DbErr> {
         entity::prelude::User::update_many()
-            .filter(entity::user::Column::Id.eq(user_id))
+            .filter(entity::user::Column::DiscordId.eq(user_id.to_string()))
             .col_expr(
                 entity::user::Column::LastGuildSyncAt,
                 sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
@@ -124,14 +97,14 @@ impl<'a> UserRepository<'a> {
     /// Used after successfully syncing a user's role memberships.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord ID of the user (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Timestamp updated successfully
     /// - `Err(DbErr)`: Database error during update
-    pub async fn update_role_sync_timestamp(&self, user_id: i32) -> Result<(), DbErr> {
+    pub async fn update_role_sync_timestamp(&self, user_id: u64) -> Result<(), DbErr> {
         entity::prelude::User::update_many()
-            .filter(entity::user::Column::Id.eq(user_id))
+            .filter(entity::user::Column::DiscordId.eq(user_id.to_string()))
             .col_expr(
                 entity::user::Column::LastRoleSyncAt,
                 sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
@@ -147,18 +120,19 @@ impl<'a> UserRepository<'a> {
     /// Used after successfully syncing guild memberships for multiple users during bot startup.
     ///
     /// # Arguments
-    /// - `user_ids`: Slice of database IDs of users to update
+    /// - `user_ids`: Slice of Discord IDs of users to update (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Timestamps updated successfully
     /// - `Err(DbErr)`: Database error during update
-    pub async fn update_guild_sync_timestamps(&self, user_ids: &[i32]) -> Result<(), DbErr> {
+    pub async fn update_guild_sync_timestamps(&self, user_ids: &[u64]) -> Result<(), DbErr> {
         if user_ids.is_empty() {
             return Ok(());
         }
 
+        let user_id_strings: Vec<String> = user_ids.iter().map(|id| id.to_string()).collect();
         entity::prelude::User::update_many()
-            .filter(entity::user::Column::Id.is_in(user_ids.iter().copied()))
+            .filter(entity::user::Column::DiscordId.is_in(user_id_strings))
             .col_expr(
                 entity::user::Column::LastGuildSyncAt,
                 sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
@@ -174,18 +148,19 @@ impl<'a> UserRepository<'a> {
     /// Used after successfully syncing role memberships for multiple users during bot startup.
     ///
     /// # Arguments
-    /// - `user_ids`: Slice of database IDs of users to update
+    /// - `user_ids`: Slice of Discord IDs of users to update (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Timestamps updated successfully
     /// - `Err(DbErr)`: Database error during update
-    pub async fn update_role_sync_timestamps(&self, user_ids: &[i32]) -> Result<(), DbErr> {
+    pub async fn update_role_sync_timestamps(&self, user_ids: &[u64]) -> Result<(), DbErr> {
         if user_ids.is_empty() {
             return Ok(());
         }
 
+        let user_id_strings: Vec<String> = user_ids.iter().map(|id| id.to_string()).collect();
         entity::prelude::User::update_many()
-            .filter(entity::user::Column::Id.is_in(user_ids.iter().copied()))
+            .filter(entity::user::Column::DiscordId.is_in(user_id_strings))
             .col_expr(
                 entity::user::Column::LastRoleSyncAt,
                 sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),

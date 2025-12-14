@@ -26,13 +26,13 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     /// Replaces all existing role memberships for the user with the current set.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     /// - `member`: Discord Member object containing the user's current roles
     ///
     /// # Returns
     /// - `Ok(())`: Sync completed successfully
     /// - `Err(AppError)`: Database error during role query or sync
-    pub async fn sync_user_roles(&self, user_id: i32, member: &Member) -> Result<(), AppError> {
+    pub async fn sync_user_roles(&self, user_id: u64, member: &Member) -> Result<(), AppError> {
         let role_repo = DiscordGuildRoleRepository::new(self.db);
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);
 
@@ -98,7 +98,10 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         );
 
         // Get all logged-in users
-        let member_discord_ids: Vec<i64> = members.iter().map(|m| m.user.id.get() as i64).collect();
+        let member_discord_ids: Vec<String> = members
+            .iter()
+            .map(|m| m.user.id.get().to_string())
+            .collect();
 
         let logged_in_users: Vec<entity::user::Model> = entity::prelude::User::find()
             .filter(entity::user::Column::DiscordId.is_in(member_discord_ids))
@@ -116,20 +119,25 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         // Sync roles for each logged-in user
         let mut synced_user_ids = Vec::new();
         for user in &logged_in_users {
+            let user_id = match user.discord_id.parse::<u64>() {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::error!("Failed to parse user discord_id: {:?}", e);
+                    continue;
+                }
+            };
+
             // Find the corresponding member
-            if let Some(member) = members
-                .iter()
-                .find(|m| m.user.id.get() == user.discord_id as u64)
-            {
-                if let Err(e) = self.sync_user_roles(user.id, member).await {
+            if let Some(member) = members.iter().find(|m| m.user.id.get() == user_id) {
+                if let Err(e) = self.sync_user_roles(user_id, member).await {
                     tracing::error!(
                         "Failed to sync roles for user {} in guild {}: {:?}",
-                        user.id,
+                        user.discord_id,
                         guild_id,
                         e
                     );
                 } else {
-                    synced_user_ids.push(user.id);
+                    synced_user_ids.push(user_id);
                 }
             }
         }
@@ -157,14 +165,14 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     /// in the database by its Discord role ID and creates the relationship if found.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     /// - `role_id`: Discord's unique identifier for the role (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Role relationship created successfully
     /// - `Err(AppError)`: Database error during role lookup or creation
     #[allow(dead_code)]
-    pub async fn add_user_role(&self, user_id: i32, role_id: u64) -> Result<(), AppError> {
+    pub async fn add_user_role(&self, user_id: u64, role_id: u64) -> Result<(), AppError> {
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);
 
         // Find by role_id across all guilds
@@ -194,14 +202,14 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     /// in the database by its Discord role ID and removes the relationship if found.
     ///
     /// # Arguments
-    /// - `user_id`: Database ID of the user
+    /// - `user_id`: Discord user ID (u64)
     /// - `role_id`: Discord's unique identifier for the role (u64)
     ///
     /// # Returns
     /// - `Ok(())`: Role relationship removed successfully
     /// - `Err(AppError)`: Database error during role lookup or deletion
     #[allow(dead_code)]
-    pub async fn remove_user_role(&self, user_id: i32, role_id: u64) -> Result<(), AppError> {
+    pub async fn remove_user_role(&self, user_id: u64, role_id: u64) -> Result<(), AppError> {
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);
 
         // Find the guild role in database

@@ -101,7 +101,6 @@ impl<'a> DiscordGuildChannelService<'a> {
                     AppError::InternalError(format!("Failed to parse channel_id: {}", e))
                 })?;
                 Ok(DiscordGuildChannelDto {
-                    id: channel.id,
                     guild_id,
                     channel_id,
                     name: channel.name,

@@ -90,14 +90,16 @@ pub async fn callback(
 
     let new_user = auth_service.callback(params.0.code, set_admin).await?;
 
-    session.insert(SESSION_AUTH_USER_ID, new_user.id).await?;
+    session
+        .insert(SESSION_AUTH_USER_ID, new_user.discord_id.clone())
+        .await?;
 
     Ok(Redirect::permanent("/"))
 }
 
 pub async fn logout(session: Session) -> Result<impl IntoResponse, AppError> {
     // Only clear session if there actually is a user in session
-    if let Some(_user_id) = session.get::<i32>(SESSION_AUTH_USER_ID).await? {
+    if let Some(_user_id) = session.get::<String>(SESSION_AUTH_USER_ID).await? {
         session.clear().await;
     }
 
@@ -111,9 +113,13 @@ pub async fn get_user(
 ) -> Result<impl IntoResponse, AppError> {
     let user_service = UserService::new(&state.db);
 
-    let Some(user_id) = session.get(SESSION_AUTH_USER_ID).await? else {
+    let Some(user_id_str) = session.get::<String>(SESSION_AUTH_USER_ID).await? else {
         return Err(AuthError::UserNotInSession.into());
     };
+
+    let user_id = user_id_str.parse::<u64>().map_err(|e| {
+        AppError::InternalError(format!("Failed to parse user_id from session: {}", e))
+    })?;
 
     let Some(user) = user_service.get_user(user_id).await? else {
         return Err(AuthError::UserNotInDatabase(user_id).into());

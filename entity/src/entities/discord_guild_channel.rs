@@ -5,11 +5,9 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "discord_guild_channel")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    pub guild_id: String,
-    #[sea_orm(unique)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub channel_id: String,
+    pub guild_id: String,
     pub name: String,
     pub position: i32,
 }
@@ -37,6 +35,19 @@ impl Related<super::discord_guild::Entity> for Entity {
 impl Related<super::fleet_category_channel::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::FleetCategoryChannel.def()
+    }
+}
+
+impl Related<super::fleet_category::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::fleet_category_channel::Relation::FleetCategory.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::fleet_category_channel::Relation::DiscordGuildChannel
+                .def()
+                .rev(),
+        )
     }
 }
 

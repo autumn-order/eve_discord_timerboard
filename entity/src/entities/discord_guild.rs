@@ -5,9 +5,7 @@ use sea_orm::entity::prelude::*;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
 #[sea_orm(table_name = "discord_guild")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(unique)]
+    #[sea_orm(primary_key, auto_increment = false)]
     pub guild_id: String,
     pub name: String,
     pub icon_hash: Option<String>,
@@ -54,6 +52,19 @@ impl Related<super::ping_format::Entity> for Entity {
 impl Related<super::user_discord_guild::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserDiscordGuild.def()
+    }
+}
+
+impl Related<super::user::Entity> for Entity {
+    fn to() -> RelationDef {
+        super::user_discord_guild::Relation::User.def()
+    }
+    fn via() -> Option<RelationDef> {
+        Some(
+            super::user_discord_guild::Relation::DiscordGuild
+                .def()
+                .rev(),
+        )
     }
 }
 
