@@ -158,4 +158,38 @@ impl<'a> UserDiscordGuildRepository<'a> {
 
         Ok(())
     }
+
+    /// Gets all users with details for a specific guild
+    ///
+    /// Retrieves user information for all members of a guild.
+    /// Used for showing guild member lists.
+    ///
+    /// # Arguments
+    /// - `guild_id`: Discord guild ID
+    ///
+    /// # Returns
+    /// - `Ok(Vec<User>)`: Vector of users who are members of the guild
+    /// - `Err(DbErr)`: Database error during query
+    pub async fn get_guild_members(
+        &self,
+        guild_id: u64,
+    ) -> Result<Vec<entity::user::Model>, DbErr> {
+        // Get all user IDs for this guild
+        let user_guild_relationships = self.get_users_by_guild(guild_id).await?;
+
+        if user_guild_relationships.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let user_ids: Vec<String> = user_guild_relationships
+            .into_iter()
+            .map(|ug| ug.user_id)
+            .collect();
+
+        // Fetch all user models
+        entity::prelude::User::find()
+            .filter(entity::user::Column::DiscordId.is_in(user_ids))
+            .all(self.db)
+            .await
+    }
 }

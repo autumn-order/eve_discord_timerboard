@@ -15,6 +15,7 @@ use crate::server::{
             get_all_discord_guilds, get_discord_guild_by_id, get_discord_guild_channels,
             get_discord_guild_roles,
         },
+        fleet::{get_category_details, get_guild_members},
         ping_format::{
             create_ping_format, delete_ping_format, get_ping_formats, update_ping_format,
         },
@@ -32,6 +33,7 @@ fn api_router() -> Router<AppState> {
         .nest("/auth", auth_router())
         .nest("/admin", admin_router())
         .nest("/user", user_router())
+        .nest("/guilds", guilds_router())
 }
 
 fn auth_router() -> Router<AppState> {
@@ -47,6 +49,15 @@ fn user_router() -> Router<AppState> {
         "/guilds/{guild_id}/manageable-categories",
         get(get_user_manageable_categories),
     )
+}
+
+fn guilds_router() -> Router<AppState> {
+    Router::new()
+        .route("/{guild_id}/members", get(get_guild_members))
+        .route(
+            "/{guild_id}/categories/{category_id}/details",
+            get(get_category_details),
+        )
 }
 
 fn admin_router() -> Router<AppState> {

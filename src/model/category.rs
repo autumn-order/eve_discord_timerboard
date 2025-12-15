@@ -110,6 +110,33 @@ pub struct PaginatedFleetCategoriesDto {
     pub total_pages: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PingFormatFieldDto {
+    pub id: i32,
+    pub name: String,
+    pub priority: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FleetCategoryDetailsDto {
+    pub id: i32,
+    #[serde(
+        serialize_with = "serialize_u64_as_string",
+        deserialize_with = "deserialize_u64_from_string"
+    )]
+    pub guild_id: u64,
+    pub ping_format_id: i32,
+    pub ping_format_name: String,
+    pub name: String,
+    pub ping_lead_time: Option<Duration>,
+    pub ping_reminder: Option<Duration>,
+    pub max_pre_ping: Option<Duration>,
+    pub access_roles: Vec<FleetCategoryAccessRoleDto>,
+    pub ping_roles: Vec<FleetCategoryPingRoleDto>,
+    pub channels: Vec<FleetCategoryChannelDto>,
+    pub fields: Vec<PingFormatFieldDto>,
+}
+
 fn serialize_u64_as_string<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,

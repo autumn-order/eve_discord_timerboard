@@ -60,6 +60,18 @@ pub struct PaginatedDiscordGuildChannelsDto {
     pub entries: u64,
 }
 
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
+pub struct DiscordGuildMemberDto {
+    #[serde(
+        serialize_with = "serialize_u64_as_string",
+        deserialize_with = "deserialize_u64_from_string"
+    )]
+    pub user_id: u64,
+    pub username: String,
+    pub display_name: String,
+    pub avatar_hash: Option<String>,
+}
+
 fn serialize_u64_as_string<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,

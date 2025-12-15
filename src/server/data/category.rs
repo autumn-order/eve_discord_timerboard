@@ -418,4 +418,45 @@ impl<'a> FleetCategoryRepository<'a> {
             .all(self.db)
             .await
     }
+
+    /// Checks if a user has view access to a specific category
+    pub async fn user_can_view_category(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+        category_id: i32,
+    ) -> Result<bool, DbErr> {
+        use sea_orm::Condition;
+
+        // First, get all role IDs that the user has in this guild
+        let user_role_ids: Vec<String> = entity::prelude::UserDiscordGuildRole::find()
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.role_id)
+            .collect();
+
+        if user_role_ids.is_empty() {
+            return Ok(false);
+        }
+
+        // Check if any of the user's roles have view access to this category
+        let access_count = entity::prelude::FleetCategoryAccessRole::find()
+            .filter(entity::fleet_category_access_role::Column::FleetCategoryId.eq(category_id))
+            .filter(entity::fleet_category_access_role::Column::RoleId.is_in(user_role_ids))
+            .filter(entity::fleet_category_access_role::Column::CanView.eq(true))
+            .count(self.db)
+            .await?;
+
+        Ok(access_count > 0)
+    }
+
+    /// Gets category details with ping format fields for fleet creation
+    pub async fn get_category_details(
+        &self,
+        category_id: i32,
+    ) -> Result<Option<FleetCategoryWithRelations>, DbErr> {
+        self.get_by_id(category_id).await
+    }
 }

@@ -1,3 +1,4 @@
+use chrono::{Datelike, Timelike, Utc};
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
@@ -5,22 +6,29 @@ use crate::{
     client::{
         component::{
             page::{ErrorPage, LoadingPage},
-            Modal, Page,
+            searchable_dropdown::{DropdownItem, SearchableDropdown},
+            FullScreenModal, Modal, Page,
         },
         model::error::ApiError,
+        store::user::UserState,
     },
     model::{category::FleetCategoryListItemDto, discord::DiscordGuildDto},
 };
 
 #[cfg(feature = "web")]
-use crate::client::api::user::{get_user_guilds, get_user_manageable_categories};
+use crate::client::api::{
+    fleet::{get_category_details, get_guild_members},
+    user::{get_user_guilds, get_user_manageable_categories},
+};
 
 #[component]
 pub fn Home() -> Element {
     let mut guilds = use_signal(|| None::<Result<Vec<DiscordGuildDto>, ApiError>>);
     let mut selected_guild_id = use_signal(|| None::<u64>);
     let mut show_guild_dropdown = use_signal(|| false);
-    let show_create_modal = use_signal(|| false);
+    let mut show_create_modal = use_signal(|| false);
+    let mut show_fleet_creation = use_signal(|| false);
+    let mut selected_category_id = use_signal(|| None::<i32>);
 
     // Fetch user's guilds on first load
     #[cfg(feature = "web")]
@@ -217,11 +225,27 @@ pub fn Home() -> Element {
                     }
                 }
 
-                // Create Fleet Modal
+                // Create Fleet Modal (Category Selection)
                 if let Some(guild_id) = selected_guild_id() {
                     CreateFleetModal {
                         guild_id,
-                        show: show_create_modal
+                        show: show_create_modal,
+                        on_category_selected: move |category_id| {
+                            selected_category_id.set(Some(category_id));
+                            show_create_modal.set(false);
+                            show_fleet_creation.set(true);
+                        }
+                    }
+                }
+
+                // Fleet Creation Modal
+                if let Some(guild_id) = selected_guild_id() {
+                    if let Some(category_id) = selected_category_id() {
+                        FleetCreationModal {
+                            guild_id,
+                            category_id,
+                            show: show_fleet_creation
+                        }
                     }
                 }
             }
@@ -280,7 +304,11 @@ fn CreateFleetButton(guild_id: u64, mut show_create_modal: Signal<bool>) -> Elem
 }
 
 #[component]
-fn CreateFleetModal(guild_id: u64, mut show: Signal<bool>) -> Element {
+fn CreateFleetModal(
+    guild_id: u64,
+    mut show: Signal<bool>,
+    on_category_selected: EventHandler<i32>,
+) -> Element {
     let mut manageable_categories =
         use_signal(|| None::<Result<Vec<FleetCategoryListItemDto>, ApiError>>);
 
@@ -328,10 +356,12 @@ fn CreateFleetModal(guild_id: u64, mut show: Signal<bool>) -> Element {
                                 let category_id = category.id;
                                 let category_name = category.name.clone();
                                 rsx! {
-                                    a {
+                                    button {
                                         key: "{category_id}",
-                                        href: "/fleets/create?guild_id={guild_id}&category_id={category_id}",
-                                        class: "block p-4 rounded-box border border-base-300 hover:bg-base-200 hover:border-primary transition-all",
+                                        class: "block w-full text-left p-4 rounded-box border border-base-300 hover:bg-base-200 hover:border-primary transition-all",
+                                        onclick: move |_| {
+                                            on_category_selected.call(category_id);
+                                        },
                                         div {
                                             class: "font-medium text-lg",
                                             "{category_name}"
@@ -343,6 +373,300 @@ fn CreateFleetModal(guild_id: u64, mut show: Signal<bool>) -> Element {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -> Element {
+    let user_store = use_context::<Store<UserState>>();
+    let current_user = user_store.read().user.clone();
+
+    let mut category_details =
+        use_signal(|| None::<Result<crate::model::category::FleetCategoryDetailsDto, ApiError>>);
+    let mut guild_members =
+        use_signal(|| None::<Result<Vec<crate::model::discord::DiscordGuildMemberDto>, ApiError>>);
+
+    // Fleet form state
+    let mut fleet_name = use_signal(|| String::new());
+
+    // Pre-fill fleet time with current datetime in UTC
+    let current_datetime = {
+        let now = Utc::now();
+        format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            now.year(),
+            now.month(),
+            now.day(),
+            now.hour(),
+            now.minute()
+        )
+    };
+    let mut fleet_time = use_signal(move || current_datetime.clone());
+
+    // Pre-fill fleet commander with current user's discord_id
+    let mut fleet_commander_id =
+        use_signal(move || current_user.as_ref().map(|user| user.discord_id));
+
+    let mut fleet_description = use_signal(|| String::new());
+    let mut field_values = use_signal(|| std::collections::HashMap::<i32, String>::new());
+
+    // Searchable dropdown state
+    let mut commander_search = use_signal(|| String::new());
+    let mut show_commander_dropdown = use_signal(|| false);
+
+    // Fetch category details
+    #[cfg(feature = "web")]
+    {
+        let future =
+            use_resource(move || async move { get_category_details(guild_id, category_id).await });
+
+        match &*future.read_unchecked() {
+            Some(Ok(details)) => {
+                category_details.set(Some(Ok(details.clone())));
+            }
+            Some(Err(err)) => {
+                tracing::error!("Failed to fetch category details: {}", err);
+                category_details.set(Some(Err(err.clone())));
+            }
+            None => (),
+        }
+    }
+
+    // Fetch guild members
+    #[cfg(feature = "web")]
+    {
+        let future = use_resource(move || async move { get_guild_members(guild_id).await });
+
+        match &*future.read_unchecked() {
+            Some(Ok(members)) => {
+                guild_members.set(Some(Ok(members.clone())));
+            }
+            Some(Err(err)) => {
+                tracing::error!("Failed to fetch guild members: {}", err);
+                guild_members.set(Some(Err(err.clone())));
+            }
+            None => (),
+        }
+    }
+
+    rsx! {
+        FullScreenModal {
+            show,
+            title: "Create Fleet",
+            prevent_close: false,
+            div {
+                class: "space-y-4 overflow-y-auto max-h-[calc(100vh-200px)] sm:max-h-[calc(90vh-200px)]",
+
+                if let Some(Ok(details)) = category_details() {
+                    // Essentials Section
+                    div {
+                        class: "space-y-4",
+
+                        div {
+                            class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+
+                            // Category (read-only)
+                            div {
+                                class: "flex flex-col gap-2",
+                                label {
+                                    class: "label",
+                                    span { class: "label-text", "Category" }
+                                }
+                                input {
+                                    r#type: "text",
+                                    class: "input input-bordered w-full",
+                                    value: "{details.name}",
+                                    disabled: true
+                                }
+                            }
+
+                            // Fleet Name
+                            div {
+                                class: "flex flex-col gap-2",
+                                label {
+                                    class: "label",
+                                    span { class: "label-text", "Fleet Name" }
+                                }
+                                input {
+                                    r#type: "text",
+                                    class: "input input-bordered w-full",
+                                    placeholder: "Enter fleet name...",
+                                    value: "{fleet_name}",
+                                    oninput: move |e| fleet_name.set(e.value())
+                                }
+                            }
+
+                            // Fleet Time (UTC) - Pre-filled with current datetime
+                            div {
+                                class: "flex flex-col gap-2",
+                                label {
+                                    class: "label",
+                                    span { class: "label-text", "Fleet Time (UTC)" }
+                                }
+                                input {
+                                    r#type: "datetime-local",
+                                    class: "input input-bordered w-full",
+                                    value: "{fleet_time}",
+                                    oninput: move |e| fleet_time.set(e.value())
+                                }
+                            }
+
+                            // Fleet Commander - Searchable Dropdown (Pre-filled with current user)
+                            div {
+                                class: "flex flex-col gap-2",
+                                label {
+                                    class: "label",
+                                    span { class: "label-text", "Fleet Commander" }
+                                }
+
+                                if let Some(Ok(members)) = guild_members() {
+                                    {
+                                        let selected_member = members.iter().find(|m| Some(m.user_id) == fleet_commander_id());
+                                        let display_value = selected_member.map(|m| format!("{} (@{})", m.display_name, m.username));
+
+                                        let search_lower = commander_search().to_lowercase();
+                                        let filtered_members: Vec<_> = members.iter()
+                                            .filter(|m| {
+                                                search_lower.is_empty() ||
+                                                m.display_name.to_lowercase().contains(&search_lower) ||
+                                                m.username.to_lowercase().contains(&search_lower)
+                                            })
+                                            .collect();
+
+                                        rsx! {
+                                            SearchableDropdown {
+                                                search_query: commander_search,
+                                                placeholder: "Search for a fleet commander...".to_string(),
+                                                display_value,
+                                                required: true,
+                                                has_items: !filtered_members.is_empty(),
+                                                show_dropdown_signal: show_commander_dropdown,
+                                                empty_message: "No guild members found".to_string(),
+                                                not_found_message: "No matching members found".to_string(),
+
+                                                for member in filtered_members {
+                                                    {
+                                                        let member_id = member.user_id;
+                                                        let member_display = member.display_name.clone();
+                                                        let member_username = member.username.clone();
+                                                        let is_selected = Some(member_id) == fleet_commander_id();
+
+                                                        rsx! {
+                                                            DropdownItem {
+                                                                key: "{member_id}",
+                                                                selected: is_selected,
+                                                                on_select: move |_| {
+                                                                    fleet_commander_id.set(Some(member_id));
+                                                                    show_commander_dropdown.set(false);
+                                                                    commander_search.set(String::new());
+                                                                },
+                                                                div {
+                                                                    class: "flex flex-col",
+                                                                    span { class: "font-semibold", "{member_display}" }
+                                                                    span { class: "text-sm opacity-70", "@{member_username}" }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Ping Format Fields Section
+                    if !details.fields.is_empty() {
+                        div {
+                            class: "space-y-4",
+
+                            div {
+                                class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+
+                                for field in details.fields.clone() {
+                                    {
+                                        let field_id = field.id;
+                                        let field_name = field.name.clone();
+                                        rsx! {
+                                            div {
+                                                key: "{field_id}",
+                                                class: "flex flex-col gap-2",
+                                                label {
+                                                    class: "label",
+                                                    span { class: "label-text", "{field_name}" }
+                                                }
+                                                input {
+                                                    r#type: "text",
+                                                    class: "input input-bordered w-full",
+                                                    placeholder: "Enter {field_name.to_lowercase()}...",
+                                                    value: "{field_values().get(&field_id).cloned().unwrap_or_default()}",
+                                                    oninput: move |e| {
+                                                        let mut values = field_values();
+                                                        values.insert(field_id, e.value());
+                                                        field_values.set(values);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Fleet Description Section
+                    div {
+                        class: "space-y-2",
+                        h3 {
+                            class: "text-lg font-bold",
+                            "Description"
+                        }
+                        textarea {
+                            class: "textarea textarea-bordered h-32 w-full",
+                            placeholder: "Enter fleet description...",
+                            value: "{fleet_description}",
+                            oninput: move |e| fleet_description.set(e.value())
+                        }
+                    }
+
+                    // Action Buttons
+                    div {
+                        class: "flex gap-2 justify-end pt-4",
+                        button {
+                            class: "btn",
+                            onclick: move |_| show.set(false),
+                            "Cancel"
+                        }
+                        button {
+                            class: "btn btn-primary",
+                            disabled: fleet_name().is_empty() || fleet_time().is_empty() || fleet_commander_id().is_none(),
+                            onclick: move |_| {
+                                // TODO: Implement fleet creation
+                                tracing::info!("Create fleet: {} at {}", fleet_name(), fleet_time());
+                            },
+                            "Create Fleet"
+                        }
+                    }
+                } else if let Some(Err(_)) = category_details() {
+                    div {
+                        class: "text-center py-8",
+                        p {
+                            class: "text-error",
+                            "Failed to load category details"
+                        }
+                    }
+                } else {
+                    div {
+                        class: "text-center py-8",
+                        span {
+                            class: "loading loading-spinner loading-lg"
                         }
                     }
                 }

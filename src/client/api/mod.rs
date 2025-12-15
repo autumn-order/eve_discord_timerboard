@@ -15,3 +15,6 @@ pub mod ping_format;
 
 #[cfg(feature = "web")]
 pub mod user;
+
+#[cfg(feature = "web")]
+pub mod fleet;
