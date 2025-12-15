@@ -92,10 +92,15 @@ impl<'a> FleetRepository<'a> {
 
     /// Gets paginated fleets for a guild, ordered by fleet_time (upcoming first)
     ///
+    /// Filters fleets to only include:
+    /// - Fleets in categories the user can view (or all if category_ids is None for admins)
+    /// - Fleets that are not older than 1 hour from the current time
+    ///
     /// # Arguments
     /// - `guild_id`: Discord guild ID (u64)
     /// - `page`: Page number (0-indexed)
     /// - `per_page`: Number of items per page
+    /// - `viewable_category_ids`: Optional list of category IDs the user can view (None means all categories - admin bypass)
     ///
     /// # Returns
     /// - `Ok((fleets, total))`: Vector of fleets and total count
@@ -105,25 +110,39 @@ impl<'a> FleetRepository<'a> {
         guild_id: u64,
         page: u64,
         per_page: u64,
+        viewable_category_ids: Option<Vec<i32>>,
     ) -> Result<(Vec<entity::fleet::Model>, u64), DbErr> {
         use entity::fleet_category;
         use sea_orm::JoinType;
 
         let guild_id_str = guild_id.to_string();
 
-        let query = entity::prelude::Fleet::find()
+        // Calculate cutoff time (1 hour ago)
+        let cutoff_time = Utc::now() - chrono::Duration::hours(1);
+
+        let mut query = entity::prelude::Fleet::find()
             .join(
                 JoinType::InnerJoin,
                 entity::fleet::Relation::FleetCategory.def(),
             )
             .filter(fleet_category::Column::GuildId.eq(guild_id_str.as_str()))
+            .filter(entity::fleet::Column::FleetTime.gte(cutoff_time))
             .order_by_asc(entity::fleet::Column::FleetTime);
 
+        // If viewable_category_ids is provided, filter by those categories
+        if let Some(category_ids) = viewable_category_ids {
+            if category_ids.is_empty() {
+                // User has no viewable categories, return empty result
+                return Ok((Vec::new(), 0));
+            }
+            query = query.filter(entity::fleet::Column::CategoryId.is_in(category_ids));
+        }
+
         let paginator = query.paginate(self.db, per_page);
-        let total_pages = paginator.num_pages().await?;
+        let total = paginator.num_items().await?;
         let fleets = paginator.fetch_page(page).await?;
 
-        Ok((fleets, total_pages * per_page))
+        Ok((fleets, total))
     }
 
     /// Gets paginated fleets for a specific category
@@ -147,10 +166,10 @@ impl<'a> FleetRepository<'a> {
             .order_by_asc(entity::fleet::Column::FleetTime);
 
         let paginator = query.paginate(self.db, per_page);
-        let total_pages = paginator.num_pages().await?;
+        let total = paginator.num_items().await?;
         let fleets = paginator.fetch_page(page).await?;
 
-        Ok((fleets, total_pages * per_page))
+        Ok((fleets, total))
     }
 
     /// Gets upcoming fleets for a guild (fleet_time >= now)

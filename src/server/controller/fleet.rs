@@ -182,17 +182,33 @@ pub async fn create_fleet(
 
 /// GET /api/guilds/{guild_id}/fleets
 /// Get paginated fleets for a guild
+///
+/// Returns fleets filtered by:
+/// - User's view permissions (categories they have access to view)
+/// - Fleets not older than 1 hour from current time
+/// - Admins bypass category filtering and can see all fleets
 pub async fn get_fleets(
     State(state): State<AppState>,
     session: Session,
     Path(guild_id): Path<u64>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    let _user = AuthGuard::new(&state.db, &session).require(&[]).await?;
+    let user = AuthGuard::new(&state.db, &session).require(&[]).await?;
+
+    let user_id = user
+        .discord_id
+        .parse::<u64>()
+        .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
     let fleet_service = FleetService::new(&state.db);
     let fleets = fleet_service
-        .get_paginated_by_guild(guild_id, pagination.page, pagination.per_page)
+        .get_paginated_by_guild(
+            guild_id,
+            user_id,
+            user.admin,
+            pagination.page,
+            pagination.per_page,
+        )
         .await?;
 
     Ok((StatusCode::OK, Json(fleets)))

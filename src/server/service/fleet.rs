@@ -4,7 +4,10 @@ use std::collections::HashMap;
 
 use crate::{
     model::fleet::{CreateFleetDto, FleetDto, FleetListItemDto, PaginatedFleetsDto},
-    server::{data::fleet::FleetRepository, error::AppError},
+    server::{
+        data::{category::FleetCategoryRepository, fleet::FleetRepository},
+        error::AppError,
+    },
 };
 
 pub struct FleetService<'a> {
@@ -118,8 +121,14 @@ impl<'a> FleetService<'a> {
 
     /// Gets paginated fleets for a guild
     ///
+    /// Filters fleets to only include:
+    /// - Fleets in categories the user can view (admins can view all)
+    /// - Fleets that are not older than 1 hour from the current time
+    ///
     /// # Arguments
     /// - `guild_id`: Discord guild ID
+    /// - `user_id`: Discord user ID for permission filtering
+    /// - `is_admin`: Whether the user is an admin (bypasses category filtering)
     /// - `page`: Page number (0-indexed)
     /// - `per_page`: Number of items per page
     ///
@@ -129,13 +138,27 @@ impl<'a> FleetService<'a> {
     pub async fn get_paginated_by_guild(
         &self,
         guild_id: u64,
+        user_id: u64,
+        is_admin: bool,
         page: u64,
         per_page: u64,
     ) -> Result<PaginatedFleetsDto, AppError> {
         let repo = FleetRepository::new(self.db);
 
+        // Get viewable category IDs for non-admin users
+        let viewable_category_ids = if is_admin {
+            None // Admins can view all categories
+        } else {
+            let category_repo = FleetCategoryRepository::new(self.db);
+            Some(
+                category_repo
+                    .get_viewable_category_ids_by_user(user_id, guild_id)
+                    .await?,
+            )
+        };
+
         let (fleets, total) = repo
-            .get_paginated_by_guild(guild_id, page, per_page)
+            .get_paginated_by_guild(guild_id, page, per_page, viewable_category_ids)
             .await?;
 
         let total_pages = if per_page > 0 {
@@ -183,58 +206,6 @@ impl<'a> FleetService<'a> {
             per_page,
             total_pages,
         })
-    }
-
-    /// Gets upcoming fleets for a guild
-    ///
-    /// # Arguments
-    /// - `guild_id`: Discord guild ID
-    /// - `limit`: Maximum number of fleets to return
-    ///
-    /// # Returns
-    /// - `Ok(Vec<FleetListItemDto>)`: List of upcoming fleets
-    /// - `Err(AppError)`: Database error
-    pub async fn get_upcoming_by_guild(
-        &self,
-        guild_id: u64,
-        limit: u64,
-    ) -> Result<Vec<FleetListItemDto>, AppError> {
-        let repo = FleetRepository::new(self.db);
-
-        let fleets = repo.get_upcoming_by_guild(guild_id, limit).await?;
-
-        let mut fleet_list = Vec::new();
-
-        for fleet in fleets {
-            // Fetch category
-            let category = entity::prelude::FleetCategory::find_by_id(fleet.category_id)
-                .one(self.db)
-                .await?;
-
-            // Fetch commander
-            let commander = entity::prelude::User::find_by_id(&fleet.commander_id)
-                .one(self.db)
-                .await?;
-
-            if let (Some(category), Some(commander)) = (category, commander) {
-                let commander_id = commander
-                    .discord_id
-                    .parse::<u64>()
-                    .map_err(|e| AppError::InternalError(format!("Invalid commander_id: {}", e)))?;
-
-                fleet_list.push(FleetListItemDto {
-                    id: fleet.id,
-                    category_id: fleet.category_id,
-                    category_name: category.name,
-                    name: fleet.name,
-                    commander_id,
-                    commander_name: commander.name,
-                    fleet_time: fleet.fleet_time,
-                });
-            }
-        }
-
-        Ok(fleet_list)
     }
 
     /// Deletes a fleet

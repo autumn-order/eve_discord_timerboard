@@ -419,6 +419,64 @@ impl<'a> FleetCategoryRepository<'a> {
             .await
     }
 
+    /// Gets fleet category IDs that a user can view
+    ///
+    /// Returns category IDs where the user has can_view permission
+    /// through their Discord roles. Admins are not handled here - check admin status
+    /// before calling this method.
+    ///
+    /// # Arguments
+    /// - `user_id`: Discord user ID (u64)
+    /// - `guild_id`: Discord guild ID (u64)
+    ///
+    /// # Returns
+    /// - `Ok(Vec<i32>)`: Vector of fleet category IDs the user can view
+    /// - `Err(DbErr)`: Database error during query
+    pub async fn get_viewable_category_ids_by_user(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+    ) -> Result<Vec<i32>, DbErr> {
+        // First, get all role IDs that the user has in this guild
+        let user_role_ids: Vec<String> = entity::prelude::UserDiscordGuildRole::find()
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.role_id)
+            .collect();
+
+        if user_role_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Find all category IDs where the user has can_view permission
+        let category_ids: Vec<i32> = entity::prelude::FleetCategoryAccessRole::find()
+            .filter(entity::fleet_category_access_role::Column::RoleId.is_in(user_role_ids))
+            .filter(entity::fleet_category_access_role::Column::CanView.eq(true))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.fleet_category_id)
+            .collect();
+
+        if category_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Verify these categories belong to the specified guild
+        let guild_category_ids: Vec<i32> = entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::GuildId.eq(guild_id.to_string()))
+            .filter(entity::fleet_category::Column::Id.is_in(category_ids))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+
+        Ok(guild_category_ids)
+    }
+
     /// Checks if a user has view access to a specific category
     pub async fn user_can_view_category(
         &self,
