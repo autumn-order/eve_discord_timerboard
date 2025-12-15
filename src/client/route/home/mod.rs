@@ -1,10 +1,12 @@
 mod category_selection_modal;
 mod create_fleet_button;
 mod fleet_creation_modal;
+mod fleet_table;
 
 pub use category_selection_modal::CategorySelectionModal;
 pub use create_fleet_button::CreateFleetButton;
 pub use fleet_creation_modal::FleetCreationModal;
+pub use fleet_table::FleetTable;
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
@@ -28,6 +30,7 @@ pub fn Home() -> Element {
     let mut show_create_modal = use_signal(|| false);
     let mut show_fleet_creation = use_signal(|| false);
     let mut selected_category_id = use_signal(|| None::<i32>);
+    let mut refetch_trigger = use_signal(|| 0u32);
 
     // Fetch user's guilds on first load
     #[cfg(feature = "web")]
@@ -199,25 +202,12 @@ pub fn Home() -> Element {
                             }
                         }
 
-                        // Timerboard content (placeholder)
+                        // Fleet Timerboard
                         div {
-                            class: "flex items-center justify-center min-h-[400px]",
-                            if let Some(guild) = selected_guild.clone() {
-                                div {
-                                    class: "text-center",
-                                    h2 {
-                                        class: "text-3xl font-bold opacity-50",
-                                        "{guild.name}"
-                                    }
-                                    p {
-                                        class: "text-sm opacity-30 mt-2",
-                                        "Timerboard content coming soon"
-                                    }
-                                }
-                            } else {
-                                p {
-                                    class: "opacity-50",
-                                    "Select a server to view its timerboard"
+                            if let Some(guild_id) = selected_guild_id() {
+                                FleetTable {
+                                    guild_id,
+                                    refetch_trigger
                                 }
                             }
                         }
@@ -243,7 +233,10 @@ pub fn Home() -> Element {
                         FleetCreationModal {
                             guild_id,
                             category_id,
-                            show: show_fleet_creation
+                            show: show_fleet_creation,
+                            on_success: move |_| {
+                                refetch_trigger.set(refetch_trigger() + 1);
+                            }
                         }
                     }
                 }

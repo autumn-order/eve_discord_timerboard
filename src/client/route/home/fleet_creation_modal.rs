@@ -23,7 +23,12 @@ use crate::client::api::{
 
 /// Modal for creating a new fleet with all required details
 #[component]
-pub fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -> Element {
+pub fn FleetCreationModal(
+    guild_id: u64,
+    category_id: i32,
+    mut show: Signal<bool>,
+    on_success: EventHandler<()>,
+) -> Element {
     let user_store = use_context::<Store<UserState>>();
     let current_user = user_store.read().user.clone();
     let current_user_id = current_user.as_ref().map(|user| user.discord_id);
@@ -108,6 +113,8 @@ pub fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool
                     field_values.set(HashMap::new());
                     is_submitting.set(false);
                     show.set(false);
+                    // Notify parent to refetch fleets
+                    on_success.call(());
                 }
                 Err(err) => {
                     tracing::error!("Failed to create fleet: {}", err);
