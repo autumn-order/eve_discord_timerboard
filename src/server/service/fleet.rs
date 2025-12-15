@@ -246,22 +246,40 @@ impl<'a> FleetService<'a> {
         Ok(false)
     }
 
-    /// Parses fleet time from "YYYY-MM-DD HH:MM" format to DateTime<Utc>
+    /// Parses fleet time from "YYYY-MM-DD HH:MM" format or "now" to DateTime<Utc>
+    ///
+    /// Validates that the fleet time is not in the past.
     ///
     /// # Arguments
-    /// - `time_str`: Time string in format "YYYY-MM-DD HH:MM"
+    /// - `time_str`: Time string in format "YYYY-MM-DD HH:MM" or "now" (case-insensitive)
     ///
     /// # Returns
     /// - `Ok(DateTime<Utc>)`: Parsed datetime
-    /// - `Err(AppError)`: Invalid format
+    /// - `Err(AppError)`: Invalid format or time is in the past
     fn parse_fleet_time(time_str: &str) -> Result<DateTime<Utc>, AppError> {
-        NaiveDateTime::parse_from_str(time_str, "%Y-%m-%d %H:%M")
-            .map(|naive| naive.and_utc())
-            .map_err(|e| {
-                AppError::BadRequest(format!(
-                    "Invalid fleet time format. Expected 'YYYY-MM-DD HH:MM', got '{}': {}",
-                    time_str, e
-                ))
-            })
+        let now = Utc::now();
+
+        // Handle "now" shorthand (case-insensitive)
+        let fleet_time = if time_str.trim().eq_ignore_ascii_case("now") {
+            now
+        } else {
+            NaiveDateTime::parse_from_str(time_str, "%Y-%m-%d %H:%M")
+                .map(|naive| naive.and_utc())
+                .map_err(|e| {
+                    AppError::BadRequest(format!(
+                        "Invalid fleet time format. Expected 'YYYY-MM-DD HH:MM' or 'now', got '{}': {}",
+                        time_str, e
+                    ))
+                })?
+        };
+
+        // Validate fleet time is not in the past
+        if fleet_time < now {
+            return Err(AppError::BadRequest(
+                "Fleet time cannot be in the past".to_string(),
+            ));
+        }
+
+        Ok(fleet_time)
     }
 }

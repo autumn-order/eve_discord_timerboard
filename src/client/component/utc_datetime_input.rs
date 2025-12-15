@@ -1,10 +1,11 @@
+use chrono::{NaiveDateTime, Utc};
 use dioxus::prelude::*;
 
-/// UTC DateTime input component with format: YYYY-MM-DD HH:MM
+/// UTC DateTime input component with format: YYYY-MM-DD HH:MM or "now"
 /// Ensures 24-hour time format and UTC timezone
 #[component]
 pub fn UtcDateTimeInput(
-    /// Current datetime value signal in format "YYYY-MM-DD HH:MM"
+    /// Current datetime value signal in format "YYYY-MM-DD HH:MM" or "now"
     mut value: Signal<String>,
     /// Placeholder text
     #[props(default = "YYYY-MM-DD HH:MM".to_string())]
@@ -29,6 +30,12 @@ pub fn UtcDateTimeInput(
                 error_message.set("Date and time are required".to_string());
                 return false;
             }
+            error_message.set(String::new());
+            return true;
+        }
+
+        // Handle "now" shorthand (case-insensitive)
+        if input.trim().eq_ignore_ascii_case("now") {
             error_message.set(String::new());
             return true;
         }
@@ -117,6 +124,16 @@ pub fn UtcDateTimeInput(
             return false;
         }
 
+        // Validate that the datetime is not in the past
+        if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M") {
+            let input_dt = naive_dt.and_utc();
+            let now = Utc::now();
+            if input_dt < now {
+                error_message.set("Fleet time cannot be in the past".to_string());
+                return false;
+            }
+        }
+
         error_message.set(String::new());
         true
     };
@@ -153,7 +170,7 @@ pub fn UtcDateTimeInput(
             }
             div {
                 class: "text-xs opacity-60 mt-1",
-                "Format: YYYY-MM-DD HH:MM (UTC, 24-hour time)"
+                "Format: YYYY-MM-DD HH:MM (UTC, 24-hour time) or \"now\""
             }
         }
     }
