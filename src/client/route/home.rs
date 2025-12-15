@@ -7,7 +7,7 @@ use crate::{
         component::{
             page::{ErrorPage, LoadingPage},
             searchable_dropdown::{DropdownItem, SearchableDropdown},
-            FullScreenModal, Modal, Page,
+            FullScreenModal, Modal, Page, UtcDateTimeInput,
         },
         model::error::ApiError,
         store::user::UserState,
@@ -386,6 +386,11 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
     let user_store = use_context::<Store<UserState>>();
     let current_user = user_store.read().user.clone();
 
+    // Track selected category (can be changed via dropdown)
+    let mut selected_category_id = use_signal(move || category_id);
+
+    let mut manageable_categories =
+        use_signal(|| None::<Result<Vec<FleetCategoryListItemDto>, ApiError>>);
     let mut category_details =
         use_signal(|| None::<Result<crate::model::category::FleetCategoryDetailsDto, ApiError>>);
     let mut guild_members =
@@ -394,11 +399,11 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
     // Fleet form state
     let mut fleet_name = use_signal(|| String::new());
 
-    // Pre-fill fleet time with current datetime in UTC
+    // Pre-fill fleet datetime with current UTC time in format "YYYY-MM-DD HH:MM"
     let current_datetime = {
         let now = Utc::now();
         format!(
-            "{:04}-{:02}-{:02}T{:02}:{:02}",
+            "{:04}-{:02}-{:02} {:02}:{:02}",
             now.year(),
             now.month(),
             now.day(),
@@ -406,7 +411,7 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
             now.minute()
         )
     };
-    let mut fleet_time = use_signal(move || current_datetime.clone());
+    let fleet_datetime = use_signal(move || current_datetime.clone());
 
     // Pre-fill fleet commander with current user's discord_id
     let mut fleet_commander_id =
@@ -419,11 +424,30 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
     let mut commander_search = use_signal(|| String::new());
     let mut show_commander_dropdown = use_signal(|| false);
 
-    // Fetch category details
+    // Fetch manageable categories
     #[cfg(feature = "web")]
     {
         let future =
-            use_resource(move || async move { get_category_details(guild_id, category_id).await });
+            use_resource(move || async move { get_user_manageable_categories(guild_id).await });
+
+        match &*future.read_unchecked() {
+            Some(Ok(categories)) => {
+                manageable_categories.set(Some(Ok(categories.clone())));
+            }
+            Some(Err(err)) => {
+                tracing::error!("Failed to fetch categories: {}", err);
+                manageable_categories.set(Some(Err(err.clone())));
+            }
+            None => (),
+        }
+    }
+
+    // Fetch category details (re-fetches when selected_category_id changes)
+    #[cfg(feature = "web")]
+    {
+        let future = use_resource(use_reactive!(|selected_category_id| async move {
+            get_category_details(guild_id, selected_category_id()).await
+        }));
 
         match &*future.read_unchecked() {
             Some(Ok(details)) => {
@@ -470,18 +494,46 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
                         div {
                             class: "grid grid-cols-1 md:grid-cols-2 gap-4",
 
-                            // Category (read-only)
+                            // Category (dropdown to switch categories)
                             div {
                                 class: "flex flex-col gap-2",
                                 label {
                                     class: "label",
                                     span { class: "label-text", "Category" }
                                 }
-                                input {
-                                    r#type: "text",
-                                    class: "input input-bordered w-full",
-                                    value: "{details.name}",
-                                    disabled: true
+                                {
+                                    if let Some(Ok(categories)) = manageable_categories() {
+                                        rsx! {
+                                            select {
+                                                class: "select select-bordered w-full",
+                                                value: "{selected_category_id()}",
+                                                onchange: move |e| {
+                                                    if let Ok(new_id) = e.value().parse::<i32>() {
+                                                        selected_category_id.set(new_id);
+                                                        // Clear field values when category changes
+                                                        field_values.set(std::collections::HashMap::new());
+                                                    }
+                                                },
+                                                for category in categories {
+                                                    option {
+                                                        key: "{category.id}",
+                                                        value: "{category.id}",
+                                                        selected: category.id == selected_category_id(),
+                                                        "{category.name}"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        rsx! {
+                                            input {
+                                                r#type: "text",
+                                                class: "input input-bordered w-full",
+                                                value: "{details.name}",
+                                                disabled: true
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -501,18 +553,16 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
                                 }
                             }
 
-                            // Fleet Time (UTC) - Pre-filled with current datetime
+                            // Fleet DateTime (UTC, 24-hour format) - Pre-filled with current datetime
                             div {
                                 class: "flex flex-col gap-2",
                                 label {
                                     class: "label",
-                                    span { class: "label-text", "Fleet Time (UTC)" }
+                                    span { class: "label-text", "Fleet Date & Time" }
                                 }
-                                input {
-                                    r#type: "datetime-local",
-                                    class: "input input-bordered w-full",
-                                    value: "{fleet_time}",
-                                    oninput: move |e| fleet_time.set(e.value())
+                                UtcDateTimeInput {
+                                    value: fleet_datetime,
+                                    required: true,
                                 }
                             }
 
@@ -646,10 +696,10 @@ fn FleetCreationModal(guild_id: u64, category_id: i32, mut show: Signal<bool>) -
                         }
                         button {
                             class: "btn btn-primary",
-                            disabled: fleet_name().is_empty() || fleet_time().is_empty() || fleet_commander_id().is_none(),
+                            disabled: fleet_name().is_empty() || fleet_datetime().is_empty() || fleet_commander_id().is_none(),
                             onclick: move |_| {
                                 // TODO: Implement fleet creation
-                                tracing::info!("Create fleet: {} at {}", fleet_name(), fleet_time());
+                                tracing::info!("Create fleet: {} at {} UTC", fleet_name(), fleet_datetime());
                             },
                             "Create Fleet"
                         }

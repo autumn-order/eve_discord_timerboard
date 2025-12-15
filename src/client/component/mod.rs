@@ -7,6 +7,7 @@ pub mod page;
 pub mod pagination;
 pub mod protected_layout;
 pub mod searchable_dropdown;
+pub mod utc_datetime_input;
 
 pub use confirmation_modal::ConfirmationModal;
 pub use fullscreen_modal::FullScreenModal;
@@ -17,3 +18,4 @@ pub use page::Page;
 pub use pagination::{Pagination, PaginationData};
 pub use protected_layout::{RequiresAdmin, RequiresLoggedIn};
 pub use searchable_dropdown::{DropdownItem, SearchableDropdown, SelectedItem, SelectedItemsList};
+pub use utc_datetime_input::UtcDateTimeInput;
