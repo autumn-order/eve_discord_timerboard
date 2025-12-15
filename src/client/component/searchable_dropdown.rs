@@ -81,12 +81,12 @@ pub fn SearchableDropdown(
             if show_dropdown() {
                 if has_items {
                     div {
-                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto",
+                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-box shadow-lg max-h-60 overflow-y-auto",
                         {children}
                     }
                 } else {
                     div {
-                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg",
+                        class: "absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-box shadow-lg",
                         div {
                             class: "px-4 py-2 text-center opacity-50 text-sm",
                             if !search_query().is_empty() {
@@ -116,7 +116,7 @@ pub fn DropdownItem(
     rsx! {
         div {
             class: if selected {
-                "px-4 py-2 cursor-pointer bg-primary text-primary-content hover:bg-primary-focus"
+                "px-4 py-2 cursor-pointer bg-base-100 hover:bg-base-200"
             } else {
                 "px-4 py-2 cursor-pointer hover:bg-base-200"
             },

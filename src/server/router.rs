@@ -18,6 +18,7 @@ use crate::server::{
         ping_format::{
             create_ping_format, delete_ping_format, get_ping_formats, update_ping_format,
         },
+        user::get_user_guilds,
     },
     state::AppState,
 };
@@ -30,6 +31,7 @@ fn api_router() -> Router<AppState> {
     Router::new()
         .nest("/auth", auth_router())
         .nest("/admin", admin_router())
+        .nest("/user", user_router())
 }
 
 fn auth_router() -> Router<AppState> {
@@ -38,6 +40,10 @@ fn auth_router() -> Router<AppState> {
         .route("/callback", get(callback))
         .route("/logout", get(logout))
         .route("/user", get(get_user))
+}
+
+fn user_router() -> Router<AppState> {
+    Router::new().route("/guilds", get(get_user_guilds))
 }
 
 fn admin_router() -> Router<AppState> {

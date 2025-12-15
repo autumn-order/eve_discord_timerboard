@@ -53,4 +53,26 @@ impl<'a> DiscordGuildRepository<'a> {
             .one(self.db)
             .await
     }
+
+    /// Gets all guilds for a specific user
+    ///
+    /// Retrieves all guilds that the specified user is a member of.
+    /// Used to determine which timerboards are available to a user.
+    ///
+    /// # Arguments
+    /// - `user_id`: Discord user ID (u64)
+    ///
+    /// # Returns
+    /// - `Ok(Vec<Model>)`: Vector of guild models the user is a member of
+    /// - `Err(DbErr)`: Database error during query
+    pub async fn get_guilds_for_user(
+        &self,
+        user_id: u64,
+    ) -> Result<Vec<entity::discord_guild::Model>, DbErr> {
+        entity::prelude::DiscordGuild::find()
+            .inner_join(entity::prelude::UserDiscordGuild)
+            .filter(entity::user_discord_guild::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await
+    }
 }

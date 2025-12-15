@@ -3,7 +3,10 @@ use crate::{
         api::helper::{delete, get, parse_empty_response, parse_response, post, send_request},
         model::error::ApiError,
     },
-    model::user::{PaginatedUsersDto, UserDto},
+    model::{
+        discord::DiscordGuildDto,
+        user::{PaginatedUsersDto, UserDto},
+    },
 };
 
 pub async fn get_all_users(page: u64, per_page: u64) -> Result<PaginatedUsersDto, ApiError> {
@@ -31,4 +34,10 @@ pub async fn remove_admin(user_id: u64) -> Result<(), ApiError> {
     let request = delete(&url);
     let response = send_request(request).await?;
     parse_empty_response(response).await
+}
+
+pub async fn get_user_guilds() -> Result<Vec<DiscordGuildDto>, ApiError> {
+    let request = get("/api/user/guilds");
+    let response = send_request(request).await?;
+    parse_response(response).await
 }

@@ -1,8 +1,14 @@
 use sea_orm::DatabaseConnection;
 
 use crate::{
-    model::user::{PaginatedUsersDto, UserDto},
-    server::{data::user::UserRepository, error::AppError},
+    model::{
+        discord::DiscordGuildDto,
+        user::{PaginatedUsersDto, UserDto},
+    },
+    server::{
+        data::{discord::guild::DiscordGuildRepository, user::UserRepository},
+        error::AppError,
+    },
 };
 
 pub struct UserService<'a> {
@@ -112,5 +118,48 @@ impl<'a> UserService<'a> {
         user_repo.set_admin(user_id, false).await?;
 
         Ok(())
+    }
+
+    /// Gets all guilds for a specific user
+    ///
+    /// Retrieves all Discord guilds (timerboards) that the user is a member of.
+    /// If the user is an admin, returns all guilds in the system.
+    ///
+    /// # Arguments
+    /// - `user_id`: Discord ID of the user (u64)
+    ///
+    /// # Returns
+    /// - `Ok(Vec<DiscordGuildDto>)`: Vector of guilds the user has access to
+    /// - `Err(AppError)`: Database error or parse error
+    pub async fn get_user_guilds(&self, user_id: u64) -> Result<Vec<DiscordGuildDto>, AppError> {
+        let user_repo = UserRepository::new(self.db);
+        let guild_repo = DiscordGuildRepository::new(self.db);
+
+        // Check if user is admin
+        let user = user_repo.find_by_discord_id(user_id).await?;
+        let is_admin = user.map(|u| u.admin).unwrap_or(false);
+
+        // If admin, return all guilds; otherwise return only user's guilds
+        let guild_models = if is_admin {
+            guild_repo.get_all().await?
+        } else {
+            guild_repo.get_guilds_for_user(user_id).await?
+        };
+
+        let guilds = guild_models
+            .into_iter()
+            .map(|guild_model| {
+                let guild_id = guild_model.guild_id.parse::<u64>().map_err(|e| {
+                    AppError::InternalError(format!("Failed to parse guild_id: {}", e))
+                })?;
+                Ok(DiscordGuildDto {
+                    guild_id,
+                    name: guild_model.name,
+                    icon_hash: guild_model.icon_hash,
+                })
+            })
+            .collect::<Result<Vec<DiscordGuildDto>, AppError>>()?;
+
+        Ok(guilds)
     }
 }
