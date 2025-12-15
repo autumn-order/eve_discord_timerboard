@@ -136,4 +136,42 @@ impl<'a> FleetCategoryService<'a> {
 
         Ok(categories?)
     }
+
+    /// Gets fleet categories that a user can create or manage
+    ///
+    /// Returns categories where the user has can_create OR can_manage permission.
+    /// Admins get all categories for the guild.
+    ///
+    /// # Arguments
+    /// - `user_id`: Discord ID of the user (u64)
+    /// - `guild_id`: Discord guild ID (u64)
+    /// - `is_admin`: Whether the user is an admin
+    ///
+    /// # Returns
+    /// - `Ok(Vec<FleetCategoryListItem>)`: Vector of manageable categories
+    /// - `Err(AppError)`: Database error
+    pub async fn get_manageable_by_user(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+        is_admin: bool,
+    ) -> Result<Vec<FleetCategoryListItem>, AppError> {
+        let repo = FleetCategoryRepository::new(self.db);
+
+        let categories = if is_admin {
+            // Admins get all categories for the guild (page 0, large per_page)
+            let (cats, _) = repo.get_by_guild_id_paginated(guild_id, 0, 1000).await?;
+            cats.into_iter()
+                .map(|c| FleetCategoryListItem::from_with_counts(c))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            // Regular users get only categories they can manage
+            let cats = repo.get_manageable_by_user(user_id, guild_id).await?;
+            cats.into_iter()
+                .map(FleetCategoryListItem::from_entity)
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        Ok(categories)
+    }
 }

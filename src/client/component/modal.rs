@@ -27,7 +27,7 @@ pub fn Modal(
                 }
             },
             div {
-                class: "modal-box {class} w-11/12 max-w-lg",
+                class: "modal-box {class} border border-base-300 w-11/12 max-w-lg",
                 // Header with title and close button
                 div {
                     class: "flex justify-between items-center mb-4",

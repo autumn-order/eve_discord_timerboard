@@ -1,6 +1,6 @@
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
-    PaginatorTrait, QueryFilter, QueryOrder,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, JoinType,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 use std::collections::HashMap;
 
@@ -355,6 +355,65 @@ impl<'a> FleetCategoryRepository<'a> {
     ) -> Result<Vec<entity::fleet_category::Model>, DbErr> {
         entity::prelude::FleetCategory::find()
             .filter(entity::fleet_category::Column::PingFormatId.eq(ping_format_id))
+            .all(self.db)
+            .await
+    }
+
+    /// Gets fleet categories that a user can create or manage
+    ///
+    /// Returns categories where the user has can_create OR can_manage permission
+    /// through their Discord roles. Admins are not handled here - check admin status
+    /// before calling this method.
+    ///
+    /// # Arguments
+    /// - `user_id`: Discord user ID (u64)
+    /// - `guild_id`: Discord guild ID (u64)
+    ///
+    /// # Returns
+    /// - `Ok(Vec<Model>)`: Vector of fleet categories the user can create/manage
+    /// - `Err(DbErr)`: Database error during query
+    pub async fn get_manageable_by_user(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+    ) -> Result<Vec<entity::fleet_category::Model>, DbErr> {
+        use sea_orm::{sea_query::Expr, Condition};
+
+        // First, get all role IDs that the user has in this guild
+        let user_role_ids: Vec<String> = entity::prelude::UserDiscordGuildRole::find()
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.role_id)
+            .collect();
+
+        if user_role_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Find all category IDs where the user has can_create or can_manage permission
+        let category_ids: Vec<i32> = entity::prelude::FleetCategoryAccessRole::find()
+            .filter(entity::fleet_category_access_role::Column::RoleId.is_in(user_role_ids))
+            .filter(
+                Condition::any()
+                    .add(entity::fleet_category_access_role::Column::CanCreate.eq(true))
+                    .add(entity::fleet_category_access_role::Column::CanManage.eq(true)),
+            )
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.fleet_category_id)
+            .collect();
+
+        if category_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Get the actual category models for this guild
+        entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::GuildId.eq(guild_id.to_string()))
+            .filter(entity::fleet_category::Column::Id.is_in(category_ids))
             .order_by_asc(entity::fleet_category::Column::Name)
             .all(self.db)
             .await

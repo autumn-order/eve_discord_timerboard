@@ -4,6 +4,7 @@ use crate::{
         model::error::ApiError,
     },
     model::{
+        category::FleetCategoryListItemDto,
         discord::DiscordGuildDto,
         user::{PaginatedUsersDto, UserDto},
     },
@@ -38,6 +39,15 @@ pub async fn remove_admin(user_id: u64) -> Result<(), ApiError> {
 
 pub async fn get_user_guilds() -> Result<Vec<DiscordGuildDto>, ApiError> {
     let request = get("/api/user/guilds");
+    let response = send_request(request).await?;
+    parse_response(response).await
+}
+
+pub async fn get_user_manageable_categories(
+    guild_id: u64,
+) -> Result<Vec<FleetCategoryListItemDto>, ApiError> {
+    let url = format!("/api/user/guilds/{}/manageable-categories", guild_id);
+    let request = get(&url);
     let response = send_request(request).await?;
     parse_response(response).await
 }

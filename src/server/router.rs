@@ -18,7 +18,7 @@ use crate::server::{
         ping_format::{
             create_ping_format, delete_ping_format, get_ping_formats, update_ping_format,
         },
-        user::get_user_guilds,
+        user::{get_user_guilds, get_user_manageable_categories},
     },
     state::AppState,
 };
@@ -43,7 +43,10 @@ fn auth_router() -> Router<AppState> {
 }
 
 fn user_router() -> Router<AppState> {
-    Router::new().route("/guilds", get(get_user_guilds))
+    Router::new().route("/guilds", get(get_user_guilds)).route(
+        "/guilds/{guild_id}/manageable-categories",
+        get(get_user_manageable_categories),
+    )
 }
 
 fn admin_router() -> Router<AppState> {

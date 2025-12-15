@@ -28,7 +28,7 @@ pub fn FullScreenModal(
                 }
             },
             div {
-                class: "modal-box {class} w-full h-full max-w-none max-h-none sm:w-11/12 sm:max-w-5xl sm:h-auto sm:max-h-[90vh] m-0 sm:m-auto rounded-none sm:rounded-lg",
+                class: "modal-box {class} w-full h-full border border-base-300 max-w-none max-h-none sm:w-11/12 sm:max-w-5xl sm:h-auto sm:max-h-[90vh] m-0 sm:m-auto rounded-none sm:rounded-box",
                 // Header with title and close button
                 div {
                     class: "flex justify-between items-center mb-4",

@@ -377,9 +377,9 @@ fn PingFormatFormFields(mut form_fields: Signal<FormFieldsData>, is_submitting: 
                             div {
                                 key: "{index}",
                                 class: if is_dragging {
-                                    "flex items-center gap-3 p-3 bg-base-100 rounded-lg opacity-50"
+                                    "flex items-center gap-3 p-3 bg-base-100 rounded-box opacity-50"
                                 } else {
-                                    "flex items-center gap-3 p-3 bg-base-100 rounded-lg"
+                                    "flex items-center gap-3 p-3 bg-base-100 rounded-box"
                                 },
                                 ondragover: on_drag_over,
                                 ondrop: on_drop(index),
