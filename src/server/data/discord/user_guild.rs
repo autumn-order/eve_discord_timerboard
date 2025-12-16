@@ -25,10 +25,12 @@ impl<'a> UserDiscordGuildRepository<'a> {
         &self,
         user_id: u64,
         guild_id: u64,
+        nickname: Option<String>,
     ) -> Result<entity::user_discord_guild::Model, DbErr> {
         entity::prelude::UserDiscordGuild::insert(entity::user_discord_guild::ActiveModel {
             user_id: ActiveValue::Set(user_id.to_string()),
             guild_id: ActiveValue::Set(guild_id.to_string()),
+            nickname: ActiveValue::Set(nickname),
             ..Default::default()
         })
         .exec_with_returning(self.db)
@@ -50,12 +52,12 @@ impl<'a> UserDiscordGuildRepository<'a> {
     pub async fn create_many(
         &self,
         user_id: u64,
-        guild_ids: &[u64],
+        guild_ids: &[(u64, Option<String>)],
     ) -> Result<Vec<entity::user_discord_guild::Model>, DbErr> {
         let mut results = Vec::new();
 
         let user_id_str = user_id.to_string();
-        for guild_id in guild_ids {
+        for (guild_id, nickname) in guild_ids {
             // Check if relationship already exists
             let guild_id_str = guild_id.to_string();
             let exists = entity::prelude::UserDiscordGuild::find()
@@ -65,7 +67,7 @@ impl<'a> UserDiscordGuildRepository<'a> {
                 .await?;
 
             if exists.is_none() {
-                let model = self.create(user_id, *guild_id).await?;
+                let model = self.create(user_id, *guild_id, nickname.clone()).await?;
                 results.push(model);
             }
         }
@@ -149,7 +151,11 @@ impl<'a> UserDiscordGuildRepository<'a> {
     /// # Returns
     /// - `Ok(())`: Sync completed successfully
     /// - `Err(DbErr)`: Database error during deletion or creation
-    pub async fn sync_user_guilds(&self, user_id: u64, guild_ids: &[u64]) -> Result<(), DbErr> {
+    pub async fn sync_user_guilds(
+        &self,
+        user_id: u64,
+        guild_ids: &[(u64, Option<String>)],
+    ) -> Result<(), DbErr> {
         // Delete all existing relationships for this user
         self.delete_by_user(user_id).await?;
 
@@ -159,22 +165,22 @@ impl<'a> UserDiscordGuildRepository<'a> {
         Ok(())
     }
 
-    /// Gets all users with details for a specific guild
+    /// Gets all users with details and nicknames for a specific guild
     ///
-    /// Retrieves user information for all members of a guild.
+    /// Retrieves user information for all members of a guild along with their guild-specific nicknames.
     /// Used for showing guild member lists.
     ///
     /// # Arguments
     /// - `guild_id`: Discord guild ID
     ///
     /// # Returns
-    /// - `Ok(Vec<User>)`: Vector of users who are members of the guild
+    /// - `Ok(Vec<(User, Option<String>)>)`: Vector of tuples containing user model and optional nickname
     /// - `Err(DbErr)`: Database error during query
-    pub async fn get_guild_members(
+    pub async fn get_guild_members_with_nicknames(
         &self,
         guild_id: u64,
-    ) -> Result<Vec<entity::user::Model>, DbErr> {
-        // Get all user IDs for this guild
+    ) -> Result<Vec<(entity::user::Model, Option<String>)>, DbErr> {
+        // Get all user IDs for this guild with nicknames
         let user_guild_relationships = self.get_users_by_guild(guild_id).await?;
 
         if user_guild_relationships.is_empty() {
@@ -182,14 +188,26 @@ impl<'a> UserDiscordGuildRepository<'a> {
         }
 
         let user_ids: Vec<String> = user_guild_relationships
-            .into_iter()
-            .map(|ug| ug.user_id)
+            .iter()
+            .map(|ug| ug.user_id.clone())
             .collect();
 
         // Fetch all user models
-        entity::prelude::User::find()
+        let users = entity::prelude::User::find()
             .filter(entity::user::Column::DiscordId.is_in(user_ids))
             .all(self.db)
-            .await
+            .await?;
+
+        // Map users with their nicknames
+        let mut results = Vec::new();
+        for user in users {
+            let nickname = user_guild_relationships
+                .iter()
+                .find(|ug| ug.user_id == user.discord_id)
+                .and_then(|ug| ug.nickname.clone());
+            results.push((user, nickname));
+        }
+
+        Ok(results)
     }
 }

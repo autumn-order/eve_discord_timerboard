@@ -147,14 +147,17 @@ pub async fn get_guild_members(
     let _user = AuthGuard::new(&state.db, &session).require(&[]).await?;
 
     let user_guild_repo = UserDiscordGuildRepository::new(&state.db);
-    let members = user_guild_repo.get_guild_members(guild_id).await?;
+    let members = user_guild_repo
+        .get_guild_members_with_nicknames(guild_id)
+        .await?;
 
     let member_dtos: Vec<DiscordGuildMemberDto> = members
         .into_iter()
-        .map(|user| DiscordGuildMemberDto {
+        .map(|(user, nickname)| DiscordGuildMemberDto {
             user_id: user.discord_id.parse().unwrap_or(0),
             username: user.name.clone(),
-            display_name: user.name.clone(),
+            // Use nickname if available, otherwise fall back to username
+            display_name: nickname.unwrap_or_else(|| user.name.clone()),
             avatar_hash: None,
         })
         .collect();
@@ -191,7 +194,7 @@ pub async fn get_fleet(
 
     let fleet_service = FleetService::new(&state.db);
     let fleet = fleet_service
-        .get_by_id(fleet_id)
+        .get_by_id(fleet_id, guild_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 
@@ -275,7 +278,7 @@ pub async fn update_fleet(
     // Get the fleet to check category and commander
     let fleet_service = FleetService::new(&state.db);
     let fleet = fleet_service
-        .get_by_id(fleet_id)
+        .get_by_id(fleet_id, guild_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 
@@ -320,7 +323,7 @@ pub async fn delete_fleet(
     // Get the fleet to check category and commander
     let fleet_service = FleetService::new(&state.db);
     let fleet = fleet_service
-        .get_by_id(fleet_id)
+        .get_by_id(fleet_id, guild_id)
         .await?
         .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 

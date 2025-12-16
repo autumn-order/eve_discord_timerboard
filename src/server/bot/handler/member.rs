@@ -61,7 +61,13 @@ pub async fn handle_guild_member_addition(
         }
     };
 
-    if let Err(e) = user_guild_repo.create(user_id, guild_id_u64).await {
+    // Extract nickname from member data
+    let nickname = new_member.nick.clone();
+
+    if let Err(e) = user_guild_repo
+        .create(user_id, guild_id_u64, nickname)
+        .await
+    {
         tracing::error!("Failed to create user-guild relationship: {:?}", e);
     } else {
         tracing::info!(
@@ -180,6 +186,23 @@ pub async fn handle_guild_member_update(
             return;
         }
     };
+
+    // Update nickname if it changed
+    let user_guild_repo = UserDiscordGuildRepository::new(db);
+    let nickname = member.nick.clone();
+
+    // Delete and recreate to update nickname (simpler than upsert for this case)
+    if let Err(e) = user_guild_repo.delete(user_id, guild_id).await {
+        tracing::error!(
+            "Failed to delete user-guild relationship for update: {:?}",
+            e
+        );
+    } else if let Err(e) = user_guild_repo.create(user_id, guild_id, nickname).await {
+        tracing::error!(
+            "Failed to recreate user-guild relationship with new nickname: {:?}",
+            e
+        );
+    }
 
     let user_role_service = UserDiscordGuildRoleService::new(db);
     if let Err(e) = user_role_service.sync_user_roles(user_id, &member).await {

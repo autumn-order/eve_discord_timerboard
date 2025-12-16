@@ -48,21 +48,33 @@ impl<'a> FleetService<'a> {
             .await?;
 
         // Fetch the full fleet data with enriched information
-        self.get_by_id(fleet.id)
+        // Get guild_id from the category
+        let category = entity::prelude::FleetCategory::find_by_id(dto.category_id)
+            .one(self.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Category not found".to_string()))?;
+
+        let guild_id = category
+            .guild_id
+            .parse::<u64>()
+            .map_err(|e| AppError::InternalError(format!("Failed to parse guild_id: {}", e)))?;
+
+        self.get_by_id(fleet.id, guild_id)
             .await?
             .ok_or_else(|| AppError::NotFound("Fleet not found after creation".to_string()))
     }
 
-    /// Gets a fleet by ID with enriched data (category name, commander name, field names)
+    /// Gets a fleet by ID with enriched data (category name, commander name with nickname, field names)
     ///
     /// # Arguments
     /// - `id`: Fleet ID
+    /// - `guild_id`: Discord guild ID (for fetching commander nickname)
     ///
     /// # Returns
-    /// - `Ok(Some(FleetDto))`: Fleet found with enriched data
+    /// - `Ok(Some(FleetDto))`: The fleet with enriched data
     /// - `Ok(None)`: Fleet not found
     /// - `Err(AppError)`: Database error
-    pub async fn get_by_id(&self, id: i32) -> Result<Option<FleetDto>, AppError> {
+    pub async fn get_by_id(&self, id: i32, guild_id: u64) -> Result<Option<FleetDto>, AppError> {
         let repo = FleetRepository::new(self.db);
 
         let result = repo.get_by_id(id).await?;
@@ -104,13 +116,29 @@ impl<'a> FleetService<'a> {
                 .parse::<u64>()
                 .map_err(|e| AppError::InternalError(format!("Invalid commander_id: {}", e)))?;
 
+            // Fetch commander nickname from guild
+            use crate::server::data::discord::UserDiscordGuildRepository;
+            let user_guild_repo = UserDiscordGuildRepository::new(self.db);
+            let commander_display_name = if let Ok(members) = user_guild_repo
+                .get_guild_members_with_nicknames(guild_id)
+                .await
+            {
+                members
+                    .iter()
+                    .find(|(user, _)| user.discord_id == commander.discord_id)
+                    .and_then(|(_, nickname)| nickname.clone())
+                    .unwrap_or_else(|| commander.name.clone())
+            } else {
+                commander.name.clone()
+            };
+
             Ok(Some(FleetDto {
                 id: fleet.id,
                 category_id: fleet.category_id,
                 category_name: category.name,
                 name: fleet.name,
                 commander_id,
-                commander_name: commander.name,
+                commander_name: commander_display_name,
                 fleet_time: fleet.fleet_time,
                 description: fleet.description,
                 field_values,
@@ -189,13 +217,29 @@ impl<'a> FleetService<'a> {
                     .parse::<u64>()
                     .map_err(|e| AppError::InternalError(format!("Invalid commander_id: {}", e)))?;
 
+                // Fetch commander nickname from guild
+                use crate::server::data::discord::UserDiscordGuildRepository;
+                let user_guild_repo = UserDiscordGuildRepository::new(self.db);
+                let commander_display_name = if let Ok(members) = user_guild_repo
+                    .get_guild_members_with_nicknames(guild_id)
+                    .await
+                {
+                    members
+                        .iter()
+                        .find(|(user, _)| user.discord_id == commander.discord_id)
+                        .and_then(|(_, nickname)| nickname.clone())
+                        .unwrap_or_else(|| commander.name.clone())
+                } else {
+                    commander.name.clone()
+                };
+
                 fleet_list.push(FleetListItemDto {
                     id: fleet.id,
                     category_id: fleet.category_id,
                     category_name: category.name,
                     name: fleet.name,
                     commander_id,
-                    commander_name: commander.name,
+                    commander_name: commander_display_name,
                     fleet_time: fleet.fleet_time,
                 });
             }
@@ -281,7 +325,7 @@ impl<'a> FleetService<'a> {
 
                 // Fetch the updated fleet data with enriched information
                 return self
-                    .get_by_id(id)
+                    .get_by_id(id, guild_id)
                     .await?
                     .ok_or_else(|| AppError::NotFound("Fleet not found after update".to_string()));
             }

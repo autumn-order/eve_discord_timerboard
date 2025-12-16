@@ -148,7 +148,11 @@ impl<'a> AuthService<'a> {
         user: &entity::user::Model,
         user_guilds: &[PartialGuild],
     ) -> Result<(), AppError> {
-        let user_guild_ids: Vec<GuildId> = user_guilds.iter().map(|g| g.id).collect();
+        // Extract guild IDs with nicknames from PartialGuild
+        // Note: PartialGuild doesn't include nickname info, so we pass None
+        // Nicknames are updated via guild member events instead
+        let user_guild_data: Vec<(GuildId, Option<String>)> =
+            user_guilds.iter().map(|g| (g.id, None)).collect();
 
         let user_id = user
             .discord_id
@@ -157,7 +161,7 @@ impl<'a> AuthService<'a> {
 
         let user_guild_service = UserDiscordGuildService::new(self.db);
         user_guild_service
-            .sync_user_guilds(user_id, &user_guild_ids)
+            .sync_user_guilds(user_id, &user_guild_data)
             .await?;
 
         let user_repo = UserRepository::new(self.db);

@@ -16,6 +16,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(string(UserDiscordGuild::UserId))
                     .col(string(UserDiscordGuild::GuildId))
+                    .col(string_null(UserDiscordGuild::Nickname))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_user_discord_guild_user_id")
@@ -54,4 +55,5 @@ pub enum UserDiscordGuild {
     Table,
     UserId,
     GuildId,
+    Nickname,
 }

@@ -76,11 +76,14 @@ pub async fn handle_guild_create(
         }
     };
 
-    let member_ids: Vec<u64> = members.iter().map(|m| m.user.id.get()).collect();
+    let member_data: Vec<(u64, Option<String>)> = members
+        .iter()
+        .map(|m| (m.user.id.get(), m.nick.clone()))
+        .collect();
 
     // Sync guild members to catch any missed join/leave events while bot was offline
     if let Err(e) = user_guild_service
-        .sync_guild_members(guild_id, &member_ids)
+        .sync_guild_members(guild_id, &member_data)
         .await
     {
         tracing::error!("Failed to sync guild members: {:?}", e);

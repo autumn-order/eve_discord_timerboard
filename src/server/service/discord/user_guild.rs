@@ -35,7 +35,7 @@ impl<'a> UserDiscordGuildService<'a> {
     pub async fn sync_user_guilds(
         &self,
         user_id: u64,
-        user_guild_ids: &[GuildId],
+        user_guild_ids: &[(GuildId, Option<String>)],
     ) -> Result<(), AppError> {
         let guild_repo = DiscordGuildRepository::new(self.db);
         let user_guild_repo = UserDiscordGuildRepository::new(self.db);
@@ -43,36 +43,32 @@ impl<'a> UserDiscordGuildService<'a> {
         // Get all guilds the bot is in
         let bot_guilds = guild_repo.get_all().await?;
 
-        // Find matching guilds (where both user and bot are members)
-        let matching_guilds: Vec<_> = bot_guilds
+        // Find matching guilds (where both user and bot are members) with nicknames
+        let matching_guilds: Vec<(u64, Option<String>)> = bot_guilds
             .iter()
-            .filter(|bot_guild| {
+            .filter_map(|bot_guild| {
                 // Parse guild_id from String to u64 for comparison
                 if let Ok(guild_id_u64) = bot_guild.guild_id.parse::<u64>() {
+                    // Find matching user guild and get nickname
                     user_guild_ids
                         .iter()
-                        .any(|user_guild_id| user_guild_id.get() == guild_id_u64)
+                        .find(|(user_guild_id, _)| user_guild_id.get() == guild_id_u64)
+                        .map(|(_, nickname)| (guild_id_u64, nickname.clone()))
                 } else {
-                    false
+                    None
                 }
             })
             .collect();
 
-        let matching_discord_guild_ids: Vec<u64> = matching_guilds
-            .iter()
-            .filter_map(|g| g.guild_id.parse::<u64>().ok())
-            .collect();
-
         // Sync the user's guild memberships
         user_guild_repo
-            .sync_user_guilds(user_id, &matching_discord_guild_ids)
+            .sync_user_guilds(user_id, &matching_guilds)
             .await?;
 
         tracing::debug!(
-            "Synced {} guild memberships for user {} (guilds: {:?})",
-            matching_discord_guild_ids.len(),
-            user_id,
-            matching_discord_guild_ids
+            "Synced {} guild memberships for user {}",
+            matching_guilds.len(),
+            user_id
         );
 
         Ok(())
@@ -96,7 +92,7 @@ impl<'a> UserDiscordGuildService<'a> {
     pub async fn sync_guild_members(
         &self,
         guild_id: u64,
-        member_discord_ids: &[u64],
+        member_discord_ids: &[(u64, Option<String>)],
     ) -> Result<(), AppError> {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
@@ -115,15 +111,13 @@ impl<'a> UserDiscordGuildService<'a> {
         };
 
         // Get all logged-in users who are members of this Discord guild
+        let member_ids: Vec<String> = member_discord_ids
+            .iter()
+            .map(|(id, _)| id.to_string())
+            .collect();
+
         let logged_in_members: Vec<entity::user::Model> = entity::prelude::User::find()
-            .filter(
-                entity::user::Column::DiscordId.is_in(
-                    member_discord_ids
-                        .iter()
-                        .map(|id| id.to_string())
-                        .collect::<Vec<_>>(),
-                ),
-            )
+            .filter(entity::user::Column::DiscordId.is_in(member_ids))
             .all(self.db)
             .await?;
 
@@ -172,7 +166,14 @@ impl<'a> UserDiscordGuildService<'a> {
         for user in logged_in_members {
             if !existing_user_ids.contains(&user.discord_id) {
                 if let Ok(user_id) = user.discord_id.parse::<u64>() {
-                    user_guild_repo.create(user_id, guild_id_u64).await?;
+                    // Find the nickname for this user
+                    let nickname = member_discord_ids
+                        .iter()
+                        .find(|(id, _)| *id == user_id)
+                        .and_then(|(_, nick)| nick.clone());
+                    user_guild_repo
+                        .create(user_id, guild_id_u64, nickname)
+                        .await?;
                 }
             }
         }
