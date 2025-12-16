@@ -1,5 +1,5 @@
 [package]
-name = "eve_discord_timerboard"
+name = "timerboard"
 version = "0.1.0"
 edition = "2021"
 

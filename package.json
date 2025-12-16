@@ -1,6 +1,7 @@
 {
-  "dependencies": {
-    "daisyui": "^5.5.11",
-    "tailwindcss": "^4.1.17"
-  }
+    "dependencies": {
+        "@tailwindcss/typography": "^0.5.19",
+        "daisyui": "^5.5.11",
+        "tailwindcss": "^4.1.17"
+    }
 }

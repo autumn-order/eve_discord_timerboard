@@ -19,11 +19,16 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self, AppError> {
+        let protocol = std::env::var("PROTOCOL")
+            .map_err(|_| ConfigError::MissingEnvVar("PROTOCOL".to_string()))?;
+        let domain = std::env::var("DOMAIN")
+            .map_err(|_| ConfigError::MissingEnvVar("DOMAIN".to_string()))?;
+        let app_url = format!("{}://{}", protocol, domain);
+
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
                 .map_err(|_| ConfigError::MissingEnvVar("DATABASE_URL".to_string()))?,
-            app_url: std::env::var("APP_URL")
-                .map_err(|_| ConfigError::MissingEnvVar("APP_URL".to_string()))?,
+            app_url,
             discord_client_id: std::env::var("DISCORD_CLIENT_ID")
                 .map_err(|_| ConfigError::MissingEnvVar("DISCORD_CLIENT_SECRET".to_string()))?,
             discord_client_secret: std::env::var("DISCORD_CLIENT_SECRET")

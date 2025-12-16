@@ -2116,36 +2116,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eve_discord_timerboard"
-version = "0.1.0"
-dependencies = [
- "axum",
- "chrono",
- "dioxus",
- "dioxus-free-icons",
- "dioxus-logger",
- "dotenvy",
- "entity",
- "gloo-timers",
- "migration",
- "oauth2",
- "pulldown-cmark",
- "rand 0.9.2",
- "reqwasm",
- "reqwest 0.12.25",
- "sea-orm",
- "serde",
- "serde_json",
- "serenity",
- "thiserror 2.0.17",
- "time",
- "tokio",
- "tower-sessions",
- "tower-sessions-sqlx-store",
- "url",
-]
-
-[[package]]
 name = "event-listener"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6668,6 +6638,36 @@ checksum = "30cfb0125f12d9c277f35663a0a33f8c30190f4e4574868a330595412d34ebf3"
 dependencies = [
  "num-conv",
  "time-core",
+]
+
+[[package]]
+name = "timerboard"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "dioxus",
+ "dioxus-free-icons",
+ "dioxus-logger",
+ "dotenvy",
+ "entity",
+ "gloo-timers",
+ "migration",
+ "oauth2",
+ "pulldown-cmark",
+ "rand 0.9.2",
+ "reqwasm",
+ "reqwest 0.12.25",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "serenity",
+ "thiserror 2.0.17",
+ "time",
+ "tokio",
+ "tower-sessions",
+ "tower-sessions-sqlx-store",
+ "url",
 ]
 
 [[package]]

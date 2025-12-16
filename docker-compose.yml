@@ -1,0 +1,24 @@
+services:
+  timerboard:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.timerboard.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.timerboard.entrypoints=websecure
+      - traefik.http.routers.timerboard.tls.certresolver=primary
+      - traefik.http.services.timerboard.loadbalancer.server.port=8080
+    volumes:
+      - timerboard:/app/data
+    networks:
+      - timerboard
+      - traefik
+
+volumes:
+  timerboard:
+
+networks:
+  timerboard:
+  traefik:
+    external: true
