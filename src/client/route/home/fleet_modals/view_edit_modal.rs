@@ -79,6 +79,9 @@ pub fn FleetViewEditModal(
     // Validation warnings
     let mut validation_warnings = use_signal(|| Vec::<String>::new());
 
+    // Datetime validation error
+    let mut datetime_error = use_signal(|| None::<String>);
+
     // Permission check: user can manage if they are admin, have manage permission, or are the fleet commander
     let can_manage = use_memo(move || {
         if let Some(user) = &current_user {
@@ -353,7 +356,7 @@ pub fn FleetViewEditModal(
                                 warnings.push(format!(
                                     "Fleet \"{}\" at {} is within {} of this fleet",
                                     existing_fleet.name,
-                                    existing_fleet.fleet_time.format("%Y-%m-%d %H:%M UTC"),
+                                    existing_fleet.fleet_time.format("%Y-%m-%d %H:%M EVE time"),
                                     time_str
                                 ));
                                 break; // Only show one warning to avoid clutter
@@ -661,6 +664,7 @@ pub fn FleetViewEditModal(
                                     manageable_categories: Some(manageable_categories),
                                     allow_past_time: allow_past,
                                     min_datetime: min_dt,
+                                    datetime_error_signal: Some(datetime_error),
                                 }
                             }
                         }
@@ -741,7 +745,7 @@ pub fn FleetViewEditModal(
                             }
                             button {
                                 class: "btn btn-primary",
-                                disabled: fleet_name().is_empty() || fleet_datetime().is_empty() || fleet_commander_id().is_none() || is_submitting() || !validation_warnings().is_empty(),
+                                disabled: fleet_name().is_empty() || fleet_datetime().is_empty() || fleet_commander_id().is_none() || is_submitting() || !validation_warnings().is_empty() || datetime_error().is_some(),
                                 onclick: move |_| {
                                     is_submitting.set(true);
                                     submission_error.set(None);

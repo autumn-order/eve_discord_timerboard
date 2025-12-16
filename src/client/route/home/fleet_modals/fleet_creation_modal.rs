@@ -66,6 +66,9 @@ pub fn FleetCreationModal(
     // Validation warnings
     let mut validation_warnings = use_signal(|| Vec::<String>::new());
 
+    // Datetime validation error
+    let mut datetime_error = use_signal(|| None::<String>);
+
     // Handle fleet creation submission
     #[cfg(feature = "web")]
     let create_future = use_resource(move || async move {
@@ -262,7 +265,7 @@ pub fn FleetCreationModal(
                             warnings.push(format!(
                                 "Fleet \"{}\" at {} is within {} of this fleet",
                                 existing_fleet.name,
-                                existing_fleet.fleet_time.format("%Y-%m-%d %H:%M UTC"),
+                                existing_fleet.fleet_time.format("%Y-%m-%d %H:%M EVE time"),
                                 time_str
                             ));
                             break; // Only show one warning to avoid clutter
@@ -297,6 +300,7 @@ pub fn FleetCreationModal(
                     current_user_id,
                     selected_category_id: Some(selected_category_id),
                     manageable_categories: Some(manageable_categories),
+                    datetime_error_signal: Some(datetime_error),
                 }
 
                 // Validation warnings
@@ -352,7 +356,7 @@ pub fn FleetCreationModal(
                     }
                     button {
                         class: "btn btn-primary",
-                        disabled: fleet_name().is_empty() || fleet_datetime().is_empty() || fleet_commander_id().is_none() || is_submitting() || !validation_warnings().is_empty(),
+                        disabled: fleet_name().is_empty() || fleet_datetime().is_empty() || fleet_commander_id().is_none() || is_submitting() || !validation_warnings().is_empty() || datetime_error().is_some(),
                         onclick: move |_| {
                             is_submitting.set(true);
                             submission_error.set(None);

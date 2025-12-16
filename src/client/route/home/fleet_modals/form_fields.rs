@@ -1,12 +1,10 @@
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use dioxus::prelude::*;
 use std::collections::HashMap;
 
 use crate::{
     client::{
-        component::{
-            searchable_dropdown::{DropdownItem, SearchableDropdown},
-            UtcDateTimeInput,
-        },
+        component::searchable_dropdown::{DropdownItem, SearchableDropdown},
         model::error::ApiError,
     },
     model::{
@@ -57,9 +55,18 @@ pub fn FleetFormFields(
     // Optional props for datetime validation (only used in edit mode)
     #[props(default = false)] allow_past_time: bool,
     #[props(default = None)] min_datetime: Option<chrono::DateTime<chrono::Utc>>,
+    // Optional signal to expose datetime validation errors to parent
+    #[props(default = None)] datetime_error_signal: Option<Signal<Option<String>>>,
 ) -> Element {
     let mut commander_search = use_signal(|| String::new());
     let mut show_commander_dropdown = use_signal(|| false);
+
+    // Use provided signal or create local one
+    let mut datetime_error = if let Some(signal) = datetime_error_signal {
+        signal
+    } else {
+        use_signal(|| None::<String>)
+    };
 
     rsx! {
         if let Some(Ok(details)) = category_details() {
@@ -133,19 +140,122 @@ pub fn FleetFormFields(
                         }
                     }
 
-                    // Fleet DateTime (UTC, 24-hour format)
+                    // Fleet DateTime (Local time input with UTC conversion display)
                     div {
                         class: "flex flex-col gap-2",
                         label {
                             class: "label",
-                            span { class: "label-text", "Fleet Date & Time" }
+                            span { class: "label-text", "Fleet Date & Time (Local)" }
                         }
-                        UtcDateTimeInput {
-                            value: fleet_datetime,
-                            required: true,
-                            disabled: is_submitting,
-                            allow_past: allow_past_time,
-                            min_datetime: min_datetime,
+                        {
+                            // Convert stored UTC string to local datetime-local format
+                            let local_value = if !fleet_datetime().is_empty() {
+                                if let Ok(naive_dt) = NaiveDateTime::parse_from_str(&fleet_datetime(), "%Y-%m-%d %H:%M") {
+                                    let utc_dt = Utc.from_utc_datetime(&naive_dt);
+                                    let local_dt: DateTime<Local> = utc_dt.into();
+                                    // Format as datetime-local: YYYY-MM-DDTHH:MM
+                                    local_dt.format("%Y-%m-%dT%H:%M").to_string()
+                                } else {
+                                    String::new()
+                                }
+                            } else {
+                                String::new()
+                            };
+
+                            // Calculate min attribute for validation
+                            let min_attr = if !allow_past_time {
+                                if let Some(min_dt) = min_datetime {
+                                    // Use min_datetime if provided (edit mode)
+                                    let local_min: DateTime<Local> = min_dt.into();
+                                    Some(local_min.format("%Y-%m-%dT%H:%M").to_string())
+                                } else {
+                                    // Use current time (create mode)
+                                    let now_local = Local::now();
+                                    Some(now_local.format("%Y-%m-%dT%H:%M").to_string())
+                                }
+                            } else {
+                                None
+                            };
+
+                            rsx! {
+                                input {
+                                    r#type: "datetime-local",
+                                    class: if datetime_error().is_some() {
+                                        "input input-bordered input-error w-full"
+                                    } else {
+                                        "input input-bordered w-full"
+                                    },
+                                    value: "{local_value}",
+                                    min: min_attr.as_deref(),
+                                    disabled: is_submitting,
+                                    required: true,
+                                    oninput: move |e| {
+                                        let local_input = e.value();
+                                        datetime_error.set(None);
+
+                                        if !local_input.is_empty() {
+                                            // Parse local datetime-local format: YYYY-MM-DDTHH:MM
+                                            if let Ok(naive_local) = NaiveDateTime::parse_from_str(&local_input, "%Y-%m-%dT%H:%M") {
+                                                // Assume input is in local timezone, convert to UTC
+                                                let local_dt = Local.from_local_datetime(&naive_local).single();
+                                                if let Some(local_dt) = local_dt {
+                                                    let utc_dt: DateTime<Utc> = local_dt.into();
+
+                                                    // Always store the value first
+                                                    fleet_datetime.set(utc_dt.format("%Y-%m-%d %H:%M").to_string());
+
+                                                    // Then validate against min_datetime if provided
+                                                    if let Some(min_dt) = min_datetime {
+                                                        if utc_dt < min_dt {
+                                                            datetime_error.set(Some(format!(
+                                                                "Fleet time cannot be earlier than the original time ({})",
+                                                                min_dt.format("%Y-%m-%d %H:%M UTC")
+                                                            )));
+                                                            return;
+                                                        }
+                                                    }
+
+                                                    // Validate against current time if not allowing past times
+                                                    if !allow_past_time {
+                                                        let now = Utc::now();
+                                                        if utc_dt < now {
+                                                            datetime_error.set(Some("Fleet time cannot be in the past".to_string()));
+                                                            return;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            fleet_datetime.set(String::new());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Display validation error
+                        if let Some(error) = datetime_error() {
+                            div {
+                                class: "text-xs text-error mt-1",
+                                "{error}"
+                            }
+                        }
+                        // Display UTC conversion
+                        if !fleet_datetime().is_empty() {
+                            {
+                                let utc_display = if let Ok(naive_dt) = NaiveDateTime::parse_from_str(&fleet_datetime(), "%Y-%m-%d %H:%M") {
+                                    let utc_dt = Utc.from_utc_datetime(&naive_dt);
+                                    format!("EVE Time: {}", utc_dt.format("%Y-%m-%d %H:%M"))
+                                } else {
+                                    "Invalid datetime".to_string()
+                                };
+
+                                rsx! {
+                                    div {
+                                        class: "text-xs opacity-70 mt-1",
+                                        span { class: "font-mono", "{utc_display}" }
+                                    }
+                                }
+                            }
                         }
                     }
 

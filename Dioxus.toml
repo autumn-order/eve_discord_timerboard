@@ -1,5 +1,8 @@
 [application]
 
+[watcher]
+watch_path = ["src", "assets", "entity", "migration"]
+
 [web.app]
 # HTML title tag content
 title = "Black Rose Timerboard"
