@@ -1,11 +1,7 @@
-use chrono::{DateTime, Utc};
 use dioxus_logger::tracing;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serenity::{
-    all::{
-        ChannelId, CreateEmbed, CreateMessage, EditMessage, MessageId, MessageReference, Timestamp,
-        UserId,
-    },
+    all::{ChannelId, CreateEmbed, CreateMessage, MessageId, MessageReference, Timestamp},
     http::Http,
 };
 use std::sync::Arc;

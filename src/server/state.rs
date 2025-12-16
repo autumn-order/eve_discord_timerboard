@@ -5,6 +5,8 @@ use oauth2::{
     StandardTokenResponse,
 };
 use sea_orm::DatabaseConnection;
+use serenity::http::Http;
+use std::sync::Arc;
 
 use super::service::admin::code::AdminCodeService;
 
@@ -27,6 +29,7 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub oauth_client: OAuth2Client,
     pub admin_code_service: AdminCodeService,
+    pub discord_http: Arc<Http>,
 }
 
 impl AppState {
@@ -35,12 +38,14 @@ impl AppState {
         http_client: reqwest::Client,
         oauth_client: OAuth2Client,
         admin_code_service: AdminCodeService,
+        discord_http: Arc<Http>,
     ) -> Self {
         Self {
             db,
             http_client,
             oauth_client,
             admin_code_service,
+            discord_http,
         }
     }
 }

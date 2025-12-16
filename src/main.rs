@@ -31,11 +31,13 @@ fn main() {
 
         tracing::info!("Starting server");
 
-        // Start Discord bot in a separate task
+        // Initialize Discord bot and extract HTTP client
         let bot_db = db.clone();
-        let bot_config = config.clone();
+        let (bot_client, discord_http) = bot::start::init_bot(&config, bot_db).await?;
+
+        // Start Discord bot in a separate task
         tokio::spawn(async move {
-            if let Err(e) = bot::start::start_bot(&bot_config, bot_db).await {
+            if let Err(e) = bot::start::start_bot(bot_client).await {
                 tracing::error!("Discord bot error: {}", e);
             }
         });
@@ -50,6 +52,7 @@ fn main() {
                 http_client,
                 oauth_client,
                 admin_code_service,
+                discord_http,
             ))
             .layer(session);
         router = router.merge(server_routes);

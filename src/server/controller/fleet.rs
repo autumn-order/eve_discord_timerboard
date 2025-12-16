@@ -178,7 +178,7 @@ pub async fn create_fleet(
         .require(&[Permission::CategoryCreate(guild_id, dto.category_id)])
         .await?;
 
-    let fleet_service = FleetService::new(&state.db);
+    let fleet_service = FleetService::new(&state.db, state.discord_http.clone());
     let fleet = fleet_service.create(dto, user.admin).await?;
 
     Ok((StatusCode::CREATED, Json(fleet)))
@@ -211,7 +211,7 @@ pub async fn get_fleet(
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
-    let fleet_service = FleetService::new(&state.db);
+    let fleet_service = FleetService::new(&state.db, state.discord_http.clone());
     let fleet = fleet_service
         .get_by_id(fleet_id, guild_id, user_id, user.admin)
         .await?
@@ -248,7 +248,7 @@ pub async fn get_fleets(
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
-    let fleet_service = FleetService::new(&state.db);
+    let fleet_service = FleetService::new(&state.db, state.discord_http.clone());
     let fleets = fleet_service
         .get_paginated_by_guild(
             guild_id,
@@ -289,7 +289,7 @@ pub async fn update_fleet(
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
     // Get the fleet to check category and commander
-    let fleet_service = FleetService::new(&state.db);
+    let fleet_service = FleetService::new(&state.db, state.discord_http.clone());
     let fleet = fleet_service
         .get_by_id(fleet_id, guild_id, user_id, user.admin)
         .await?
@@ -343,7 +343,7 @@ pub async fn delete_fleet(
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
     // Get the fleet to check category and commander
-    let fleet_service = FleetService::new(&state.db);
+    let fleet_service = FleetService::new(&state.db, state.discord_http.clone());
     let fleet = fleet_service
         .get_by_id(fleet_id, guild_id, user_id, user.admin)
         .await?

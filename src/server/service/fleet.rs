@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use serenity::http::Http;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::{
     model::fleet::{
@@ -10,16 +12,18 @@ use crate::{
         data::{category::FleetCategoryRepository, fleet::FleetRepository},
         error::AppError,
         model::fleet::{CreateFleetParams, UpdateFleetParams},
+        service::fleet_notification::FleetNotificationService,
     },
 };
 
 pub struct FleetService<'a> {
     db: &'a DatabaseConnection,
+    discord_http: Arc<Http>,
 }
 
 impl<'a> FleetService<'a> {
-    pub fn new(db: &'a DatabaseConnection) -> Self {
-        Self { db }
+    pub fn new(db: &'a DatabaseConnection, discord_http: Arc<Http>) -> Self {
+        Self { db, discord_http }
     }
 
     /// Creates a new fleet
@@ -53,15 +57,22 @@ impl<'a> FleetService<'a> {
         // Create the fleet
         let params = CreateFleetParams {
             category_id: dto.category_id,
-            name: dto.name,
+            name: dto.name.clone(),
             commander_id: dto.commander_id,
             fleet_time,
-            description: dto.description,
-            field_values: dto.field_values,
+            description: dto.description.clone(),
+            field_values: dto.field_values.clone(),
             hidden: dto.hidden,
             disable_reminder: dto.disable_reminder,
         };
         let fleet = repo.create(params).await?;
+
+        // Post fleet creation notification to Discord
+        let notification_service =
+            FleetNotificationService::new(self.db, self.discord_http.clone());
+        notification_service
+            .post_fleet_creation(&fleet, &dto.field_values)
+            .await?;
 
         // Fetch the full fleet data with enriched information
         // Get guild_id from the category
