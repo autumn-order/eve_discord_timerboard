@@ -30,6 +30,10 @@ impl<'a> FleetService<'a> {
     /// - `Ok(FleetDto)`: The created fleet with enriched data
     /// - `Err(AppError)`: Validation or database error
     ///
+    /// # Time Validation
+    /// Fleet times are validated with a 2-minute grace period. Times up to 2 minutes in the
+    /// past are accepted to handle form fill time and clock skew between client and server.
+    ///
     /// # Note
     /// The returned fleet is fetched using the commander's user_id, so visibility rules apply.
     /// However, since the commander has create permission, they will always be able to see
@@ -401,6 +405,11 @@ impl<'a> FleetService<'a> {
     /// - `is_admin`: Whether the user is an admin (bypasses visibility rules when fetching result)
     /// - `dto`: Update data
     ///
+    /// # Time Validation
+    /// For fleets not yet started, new times are validated with a 2-minute grace period.
+    /// Times up to 2 minutes in the past are accepted to handle form fill time and clock skew.
+    /// For fleets already started (original time in past), times cannot be set earlier than original.
+    ///
     /// # Note
     /// The returned fleet respects visibility rules (see `get_by_id` for details).
     /// Authorization to update must be checked by the controller before calling this method.
@@ -533,7 +542,12 @@ impl<'a> FleetService<'a> {
     ///
     /// # Returns
     /// - `Ok(DateTime<Utc>)`: Parsed datetime
-    /// - `Err(AppError)`: Invalid format or time is in the past
+    /// - `Err(AppError)`: Invalid format or time is more than 2 minutes in the past
+    ///
+    /// # Grace Period
+    /// Allows times up to 2 minutes in the past to handle:
+    /// - Time spent filling out the form
+    /// - Clock skew between client and server
     fn parse_fleet_time(time_str: &str) -> Result<DateTime<Utc>, AppError> {
         Self::parse_fleet_time_with_min(time_str, None)
     }
@@ -547,6 +561,11 @@ impl<'a> FleetService<'a> {
     /// # Returns
     /// - `Ok(DateTime<Utc>)`: Parsed fleet time
     /// - `Err(AppError)`: Invalid format or time validation failure
+    ///
+    /// # Grace Period
+    /// Allows times up to 2 minutes in the past (when min_time is not provided) to handle:
+    /// - Time spent filling out the form
+    /// - Clock skew between client and server
     fn parse_fleet_time_with_min(
         time_str: &str,
         min_time: Option<DateTime<Utc>>,
@@ -578,10 +597,16 @@ impl<'a> FleetService<'a> {
         }
 
         // Validate fleet time is not in the past (only if min_time is not provided or is in the future)
+        // Allow a 2-minute grace period for immediate fleets to handle:
+        // - Time spent filling out the form
+        // - Clock skew between client and server
         if min_time.is_none() || min_time.map(|t| t >= now).unwrap_or(true) {
-            if fleet_time < now {
+            let grace_period = chrono::Duration::minutes(2);
+            let min_allowed_time = now - grace_period;
+
+            if fleet_time < min_allowed_time {
                 return Err(AppError::BadRequest(
-                    "Fleet time cannot be in the past".to_string(),
+                    "Fleet time cannot be more than 2 minutes in the past".to_string(),
                 ));
             }
         }

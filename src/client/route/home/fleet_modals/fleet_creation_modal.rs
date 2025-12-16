@@ -42,16 +42,28 @@ pub fn FleetCreationModal(
     // Fleet form state
     let mut fleet_name = use_signal(|| String::new());
 
-    // Pre-fill fleet datetime with current UTC time in format "YYYY-MM-DD HH:MM"
+    // Pre-fill fleet datetime with next 5-minute interval to give users buffer time
+    // This prevents "time in the past" errors if they take a few minutes to fill out the form
     let current_datetime = {
         let now = Utc::now();
+        let current_minute = now.minute();
+        // Round up to next 5-minute mark (e.g., 14:32 -> 14:35, 14:35 -> 14:35)
+        let rounded_minute = ((current_minute + 4) / 5) * 5;
+
+        let rounded_time = if rounded_minute >= 60 {
+            // Roll over to next hour
+            now + chrono::Duration::minutes((60 - current_minute) as i64)
+        } else {
+            now + chrono::Duration::minutes((rounded_minute - current_minute) as i64)
+        };
+
         format!(
             "{:04}-{:02}-{:02} {:02}:{:02}",
-            now.year(),
-            now.month(),
-            now.day(),
-            now.hour(),
-            now.minute()
+            rounded_time.year(),
+            rounded_time.month(),
+            rounded_time.day(),
+            rounded_time.hour(),
+            rounded_time.minute()
         )
     };
     let fleet_datetime = use_signal(move || current_datetime.clone());

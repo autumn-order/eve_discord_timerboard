@@ -216,10 +216,16 @@ pub fn FleetFormFields(
                                                     }
 
                                                     // Validate against current time if not allowing past times
+                                                    // Allow a 2-minute grace period for immediate fleets to handle:
+                                                    // - Time spent filling out the form
+                                                    // - Clock skew between client and server
                                                     if !allow_past_time {
                                                         let now = Utc::now();
-                                                        if utc_dt < now {
-                                                            datetime_error.set(Some("Fleet time cannot be in the past".to_string()));
+                                                        let grace_period = chrono::Duration::minutes(2);
+                                                        let min_allowed_time = now - grace_period;
+
+                                                        if utc_dt < min_allowed_time {
+                                                            datetime_error.set(Some("Fleet time cannot be more than 2 minutes in the past".to_string()));
                                                             return;
                                                         }
                                                     }
