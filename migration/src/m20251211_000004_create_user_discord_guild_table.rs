@@ -1,6 +1,5 @@
 use sea_orm_migration::{prelude::*, schema::*};
 
-use super::m20251210_000001_create_user_table::User;
 use super::m20251211_000002_create_discord_guild_table::DiscordGuild;
 
 #[derive(DeriveMigrationName)]
@@ -12,31 +11,24 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(UserDiscordGuild::Table)
+                    .table(DiscordGuildMember::Table)
                     .if_not_exists()
-                    .col(string(UserDiscordGuild::UserId))
-                    .col(string(UserDiscordGuild::GuildId))
-                    .col(string_null(UserDiscordGuild::Nickname))
+                    .col(string(DiscordGuildMember::UserId))
+                    .col(string(DiscordGuildMember::GuildId))
+                    .col(string(DiscordGuildMember::Username))
+                    .col(string_null(DiscordGuildMember::Nickname))
                     .foreign_key(
                         ForeignKey::create()
-                            .name("fk_user_discord_guild_user_id")
-                            .from(UserDiscordGuild::Table, UserDiscordGuild::UserId)
-                            .to(User::Table, User::DiscordId)
-                            .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .name("fk_user_discord_guild_guild_id")
-                            .from(UserDiscordGuild::Table, UserDiscordGuild::GuildId)
+                            .name("fk_discord_guild_member_guild_id")
+                            .from(DiscordGuildMember::Table, DiscordGuildMember::GuildId)
                             .to(DiscordGuild::Table, DiscordGuild::GuildId)
                             .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .primary_key(
                         Index::create()
-                            .col(UserDiscordGuild::UserId)
-                            .col(UserDiscordGuild::GuildId),
+                            .col(DiscordGuildMember::UserId)
+                            .col(DiscordGuildMember::GuildId),
                     )
                     .to_owned(),
             )
@@ -45,15 +37,16 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(UserDiscordGuild::Table).to_owned())
+            .drop_table(Table::drop().table(DiscordGuildMember::Table).to_owned())
             .await
     }
 }
 
 #[derive(DeriveIden)]
-pub enum UserDiscordGuild {
+pub enum DiscordGuildMember {
     Table,
     UserId,
     GuildId,
+    Username,
     Nickname,
 }

@@ -2,9 +2,7 @@ use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
 use serenity::all::{Context, GuildId, GuildMemberUpdateEvent, Member, User};
 
-use crate::server::data::discord::{DiscordGuildRepository, UserDiscordGuildRepository};
-use crate::server::data::user::UserRepository;
-use crate::server::service::discord::UserDiscordGuildRoleService;
+use crate::server::service::discord::{DiscordGuildMemberService, UserDiscordGuildRoleService};
 
 /// Handles the guild_member_addition event when a member joins a guild
 pub async fn handle_guild_member_addition(
@@ -12,68 +10,39 @@ pub async fn handle_guild_member_addition(
     _ctx: Context,
     new_member: Member,
 ) {
-    let discord_id = new_member.user.id.get();
+    let user_id = new_member.user.id.get();
     let guild_id = new_member.guild_id.get();
-
-    let user_repo = UserRepository::new(db);
-    let guild_repo = DiscordGuildRepository::new(db);
-    let user_guild_repo = UserDiscordGuildRepository::new(db);
-
-    // Check if this user is logged into our application
-    let Some(user) = (match user_repo.find_by_discord_id(discord_id).await {
-        Ok(user) => user,
-        Err(e) => {
-            tracing::error!("Failed to query user by discord_id: {:?}", e);
-            return;
-        }
-    }) else {
-        // User hasn't logged into the app, no need to track
-        return;
-    };
-
-    // Check if the guild is one our bot is in
-    let Some(guild) = (match guild_repo.find_by_guild_id(guild_id).await {
-        Ok(guild) => guild,
-        Err(e) => {
-            tracing::error!("Failed to query guild by guild_id: {:?}", e);
-            return;
-        }
-    }) else {
-        // Shouldn't happen since we're receiving the event, but handle it
-        tracing::warn!("Received member_add event for unknown guild {}", guild_id);
-        return;
-    };
-
-    // Create the user-guild relationship
-    let guild_id_u64 = match guild.guild_id.parse::<u64>() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to parse guild_id: {:?}", e);
-            return;
-        }
-    };
-
-    let user_id = match user.discord_id.parse::<u64>() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to parse user discord_id: {:?}", e);
-            return;
-        }
-    };
-
-    // Extract nickname from member data
+    let username = new_member.user.name.clone();
     let nickname = new_member.nick.clone();
 
-    if let Err(e) = user_guild_repo
-        .create(user_id, guild_id_u64, nickname)
+    tracing::info!(
+        "Member {} ({}) joined guild {}",
+        username,
+        user_id,
+        guild_id
+    );
+
+    // Add member to guild_member table (tracks ALL members)
+    let member_service = DiscordGuildMemberService::new(db);
+    if let Err(e) = member_service
+        .upsert_member(user_id, guild_id, username, nickname)
         .await
     {
-        tracing::error!("Failed to create user-guild relationship: {:?}", e);
-    } else {
-        tracing::info!(
-            "User {} joined guild {} - relationship created",
-            user.name,
-            guild.name
+        tracing::error!("Failed to add guild member: {:?}", e);
+        return;
+    }
+
+    // If this user has an application account, sync their roles
+    let user_role_service = UserDiscordGuildRoleService::new(db);
+    if let Err(e) = user_role_service
+        .sync_user_roles(user_id, &new_member)
+        .await
+    {
+        // This will fail silently if user doesn't have an app account - that's fine
+        tracing::debug!(
+            "Did not sync roles for user {} (likely not logged into app): {:?}",
+            user_id,
+            e
         );
     }
 }
@@ -86,67 +55,19 @@ pub async fn handle_guild_member_removal(
     user: User,
     _member_data_if_available: Option<Member>,
 ) {
-    let discord_id = user.id.get();
+    let user_id = user.id.get();
     let guild_id = guild_id.get();
 
-    let user_repo = UserRepository::new(db);
-    let guild_repo = DiscordGuildRepository::new(db);
-    let user_guild_repo = UserDiscordGuildRepository::new(db);
+    tracing::info!("Member {} ({}) left guild {}", user.name, user_id, guild_id);
 
-    // Check if this user is logged into our application
-    let Some(user) = (match user_repo.find_by_discord_id(discord_id).await {
-        Ok(user) => user,
-        Err(e) => {
-            tracing::error!("Failed to query user by discord_id: {:?}", e);
-            return;
-        }
-    }) else {
-        // User hasn't logged into the app, no need to track
-        return;
-    };
-
-    // Check if the guild is one our bot is in
-    let Some(guild) = (match guild_repo.find_by_guild_id(guild_id).await {
-        Ok(guild) => guild,
-        Err(e) => {
-            tracing::error!("Failed to query guild by guild_id: {:?}", e);
-            return;
-        }
-    }) else {
-        // Shouldn't happen since we're receiving the event, but handle it
-        tracing::warn!(
-            "Received guild_member_removal event for unknown guild {}",
-            guild_id
-        );
-        return;
-    };
-
-    // Delete the user-guild relationship
-    let guild_id_u64 = match guild.guild_id.parse::<u64>() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to parse guild_id: {:?}", e);
-            return;
-        }
-    };
-
-    let user_id = match user.discord_id.parse::<u64>() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to parse user discord_id: {:?}", e);
-            return;
-        }
-    };
-
-    if let Err(e) = user_guild_repo.delete(user_id, guild_id_u64).await {
-        tracing::error!("Failed to delete user-guild relationship: {:?}", e);
-    } else {
-        tracing::info!(
-            "User {} left guild {} - relationship removed",
-            user.name,
-            guild.name
-        );
+    // Remove member from guild_member table
+    let member_service = DiscordGuildMemberService::new(db);
+    if let Err(e) = member_service.remove_member(user_id, guild_id).await {
+        tracing::error!("Failed to remove guild member: {:?}", e);
     }
+
+    // Note: user_discord_guild_role records will be automatically deleted via CASCADE
+    // when the user row is deleted (for logged-in users only)
 }
 
 /// Handles the guild_member_update event when a member is updated in a guild (roles, nickname, etc.)
@@ -161,62 +82,35 @@ pub async fn handle_guild_member_update(
         return;
     };
 
-    let discord_id = member.user.id.get();
+    let user_id = member.user.id.get();
     let guild_id = member.guild_id.get();
-
-    let user_repo = UserRepository::new(db);
-
-    // Check if this user is logged into our application
-    let Some(user) = (match user_repo.find_by_discord_id(discord_id).await {
-        Ok(user) => user,
-        Err(e) => {
-            tracing::error!("Failed to query user by discord_id: {:?}", e);
-            return;
-        }
-    }) else {
-        // User hasn't logged into the app, no need to track
-        return;
-    };
-
-    // Sync user's role memberships
-    let user_id = match user.discord_id.parse::<u64>() {
-        Ok(id) => id,
-        Err(e) => {
-            tracing::error!("Failed to parse user discord_id: {:?}", e);
-            return;
-        }
-    };
-
-    // Update nickname if it changed
-    let user_guild_repo = UserDiscordGuildRepository::new(db);
+    let username = member.user.name.clone();
     let nickname = member.nick.clone();
 
-    // Delete and recreate to update nickname (simpler than upsert for this case)
-    if let Err(e) = user_guild_repo.delete(user_id, guild_id).await {
-        tracing::error!(
-            "Failed to delete user-guild relationship for update: {:?}",
-            e
-        );
-    } else if let Err(e) = user_guild_repo.create(user_id, guild_id, nickname).await {
-        tracing::error!(
-            "Failed to recreate user-guild relationship with new nickname: {:?}",
-            e
-        );
+    tracing::debug!(
+        "Member {} ({}) updated in guild {}",
+        username,
+        user_id,
+        guild_id
+    );
+
+    // Update member in guild_member table (updates username/nickname)
+    let member_service = DiscordGuildMemberService::new(db);
+    if let Err(e) = member_service
+        .upsert_member(user_id, guild_id, username, nickname)
+        .await
+    {
+        tracing::error!("Failed to update guild member: {:?}", e);
+        return;
     }
 
+    // If this user has an application account, sync their roles
     let user_role_service = UserDiscordGuildRoleService::new(db);
     if let Err(e) = user_role_service.sync_user_roles(user_id, &member).await {
-        tracing::error!(
-            "Failed to sync roles for user {} in guild {}: {:?}",
-            user.discord_id,
-            guild_id,
-            e
-        );
-    } else {
         tracing::debug!(
-            "Synced role memberships for user {} in guild {}",
-            user.name,
-            guild_id
+            "Did not sync roles for user {} (likely not logged into app): {:?}",
+            user_id,
+            e
         );
     }
 }

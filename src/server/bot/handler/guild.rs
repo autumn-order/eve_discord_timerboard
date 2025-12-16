@@ -4,8 +4,8 @@ use serenity::all::{Context, Guild};
 
 use crate::server::data::discord::DiscordGuildRepository;
 use crate::server::service::discord::{
-    DiscordGuildChannelService, DiscordGuildRoleService, UserDiscordGuildRoleService,
-    UserDiscordGuildService,
+    DiscordGuildChannelService, DiscordGuildMemberService, DiscordGuildRoleService,
+    UserDiscordGuildRoleService,
 };
 
 /// Handles the guild_create event when a guild becomes available or the bot joins a new guild
@@ -21,18 +21,15 @@ pub async fn handle_guild_create(
     let guild_id = guild.id.get();
     let guild_roles = guild.roles.clone();
     let guild_channels = guild.channels.clone();
-    let cached_members = guild.members.clone();
 
     tracing::debug!(
-        "Guild create event: {} ({}) - member_count: {}, cached_members: {}",
+        "Guild create event: {} ({}) - member_count: {}",
         guild.name,
         guild_id,
         guild.member_count,
-        cached_members.len()
     );
 
     let guild_repo = DiscordGuildRepository::new(db);
-    let user_guild_service = UserDiscordGuildService::new(db);
 
     if let Err(e) = guild_repo.upsert(guild).await {
         tracing::error!("Failed to upsert guild: {:?}", e);
@@ -54,45 +51,72 @@ pub async fn handle_guild_create(
         tracing::error!("Failed to update guild channels: {:?}", e);
     }
 
-    // Fetch members from Discord API since guild.members may not be populated
+    // Fetch ALL members from Discord API with pagination
     // This requires the GUILD_MEMBERS privileged intent
-    let members = match ctx
-        .http
-        .get_guild_members(guild_id.into(), None, None)
-        .await
-    {
-        Ok(members) => {
-            tracing::debug!(
-                "Fetched {} members from Discord API for guild {}",
-                members.len(),
-                guild_id
-            );
-            members
-        }
-        Err(e) => {
-            tracing::error!("Failed to fetch guild members from API: {:?}", e);
-            // Fallback to cached members if API call fails
-            cached_members.values().cloned().collect()
-        }
-    };
+    let mut all_members = Vec::new();
+    let mut after: Option<u64> = None;
 
-    let member_data: Vec<(u64, Option<String>)> = members
+    loop {
+        match ctx
+            .http
+            .get_guild_members(guild_id.into(), Some(1000), after)
+            .await
+        {
+            Ok(members) => {
+                if members.is_empty() {
+                    break;
+                }
+
+                tracing::debug!(
+                    "Fetched {} members from Discord API for guild {} (total so far: {})",
+                    members.len(),
+                    guild_id,
+                    all_members.len() + members.len()
+                );
+
+                // Set up pagination for next iteration
+                after = members.last().map(|m| m.user.id.get());
+
+                // Add to our collection
+                all_members.extend(members);
+
+                // If we got less than 1000, we've reached the end
+                if all_members.len() < 1000 {
+                    break;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch guild members from API: {:?}", e);
+                break;
+            }
+        }
+    }
+
+    tracing::info!(
+        "Fetched total of {} members for guild {}",
+        all_members.len(),
+        guild_id
+    );
+
+    // Convert to the format needed for sync: (user_id, username, nickname)
+    let member_data: Vec<(u64, String, Option<String>)> = all_members
         .iter()
-        .map(|m| (m.user.id.get(), m.nick.clone()))
+        .map(|m| (m.user.id.get(), m.user.name.clone(), m.nick.clone()))
         .collect();
 
-    // Sync guild members to catch any missed join/leave events while bot was offline
-    if let Err(e) = user_guild_service
+    // Sync ALL guild members (not just logged-in users)
+    let member_service = DiscordGuildMemberService::new(db);
+    if let Err(e) = member_service
         .sync_guild_members(guild_id, &member_data)
         .await
     {
         tracing::error!("Failed to sync guild members: {:?}", e);
     }
 
-    // Sync role memberships for logged-in users
+    // Sync role memberships for logged-in users only
     let user_role_service = UserDiscordGuildRoleService::new(db);
     if let Err(e) = user_role_service
-        .sync_guild_member_roles(guild_id, &members)
+        .sync_guild_member_roles(guild_id, &all_members)
         .await
     {
         tracing::error!("Failed to sync guild member roles: {:?}", e);

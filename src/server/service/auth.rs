@@ -12,7 +12,7 @@ use url::Url;
 use crate::server::{
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
-    service::discord::{UserDiscordGuildRoleService, UserDiscordGuildService},
+    service::discord::UserDiscordGuildRoleService,
     state::OAuth2Client,
 };
 
@@ -85,10 +85,10 @@ impl<'a> AuthService<'a> {
         Ok(new_user)
     }
 
-    /// Syncs user's guild and role memberships if needed based on timestamps
+    /// Syncs user's role memberships if needed based on timestamp
     ///
-    /// Checks if either guild or role sync is needed. If so, fetches the user's guilds
-    /// once and performs both syncs as needed to avoid duplicate API calls.
+    /// Guild membership is already tracked via discord_guild_member table (bot events),
+    /// so we only need to sync roles for logged-in users.
     async fn sync_user_data_if_needed(
         &self,
         user: &entity::user::Model,
@@ -98,74 +98,24 @@ impl<'a> AuthService<'a> {
         let sync_threshold = Duration::minutes(30);
 
         // DateTimeUtc is already DateTime<Utc>
-        let needs_guild_sync = now.signed_duration_since(user.last_guild_sync_at) > sync_threshold;
         let needs_role_sync = now.signed_duration_since(user.last_role_sync_at) > sync_threshold;
 
-        // If neither sync is needed, return early
-        if !needs_guild_sync && !needs_role_sync {
-            tracing::debug!(
-                "Skipping all syncs for user {} (guild: {}, role: {})",
-                user.discord_id,
-                user.last_guild_sync_at,
-                user.last_role_sync_at
-            );
-            return Ok(());
-        }
-
-        // Fetch user guilds once for both syncs
-        let user_guilds = self.fetch_user_guilds(token).await?;
-
-        // Sync guilds if needed
-        if needs_guild_sync {
-            tracing::debug!("Guild sync needed for user {}", user.discord_id);
-            self.sync_guilds(user, &user_guilds).await?;
-        } else {
-            tracing::debug!(
-                "Skipping guild sync for user {} (last synced: {})",
-                user.discord_id,
-                user.last_guild_sync_at
-            );
-        }
-
-        // Sync roles if needed
-        if needs_role_sync {
-            tracing::debug!("Role sync needed for user {}", user.discord_id);
-            self.sync_roles(user, token, &user_guilds).await?;
-        } else {
+        // If sync is not needed, return early
+        if !needs_role_sync {
             tracing::debug!(
                 "Skipping role sync for user {} (last synced: {})",
                 user.discord_id,
                 user.last_role_sync_at
             );
+            return Ok(());
         }
 
-        Ok(())
-    }
+        // Fetch user guilds for role sync
+        let user_guilds = self.fetch_user_guilds(token).await?;
 
-    /// Syncs user's guild memberships
-    async fn sync_guilds(
-        &self,
-        user: &entity::user::Model,
-        user_guilds: &[PartialGuild],
-    ) -> Result<(), AppError> {
-        // Extract guild IDs with nicknames from PartialGuild
-        // Note: PartialGuild doesn't include nickname info, so we pass None
-        // Nicknames are updated via guild member events instead
-        let user_guild_data: Vec<(GuildId, Option<String>)> =
-            user_guilds.iter().map(|g| (g.id, None)).collect();
-
-        let user_id = user
-            .discord_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Failed to parse user_id: {}", e)))?;
-
-        let user_guild_service = UserDiscordGuildService::new(self.db);
-        user_guild_service
-            .sync_user_guilds(user_id, &user_guild_data)
-            .await?;
-
-        let user_repo = UserRepository::new(self.db);
-        user_repo.update_guild_sync_timestamp(user_id).await?;
+        // Sync roles
+        tracing::debug!("Role sync needed for user {}", user.discord_id);
+        self.sync_roles(user, token, &user_guilds).await?;
 
         Ok(())
     }

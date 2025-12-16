@@ -211,20 +211,14 @@ impl<'a> FleetService<'a> {
                 .map_err(|e| AppError::InternalError(format!("Invalid commander_id: {}", e)))?;
 
             // Fetch commander nickname from guild
-            use crate::server::data::discord::UserDiscordGuildRepository;
-            let user_guild_repo = UserDiscordGuildRepository::new(self.db);
-            let commander_display_name = if let Ok(members) = user_guild_repo
-                .get_guild_members_with_nicknames(guild_id)
-                .await
-            {
-                members
-                    .iter()
-                    .find(|(user, _)| user.discord_id == commander.discord_id)
-                    .and_then(|(_, nickname)| nickname.clone())
-                    .unwrap_or_else(|| commander.name.clone())
-            } else {
-                commander.name.clone()
-            };
+            use crate::server::data::discord::DiscordGuildMemberRepository;
+            let member_repo = DiscordGuildMemberRepository::new(self.db);
+            let commander_display_name =
+                if let Ok(Some(member)) = member_repo.get_member(commander_id, guild_id).await {
+                    member.nickname.unwrap_or(member.username)
+                } else {
+                    commander.name.clone()
+                };
 
             Ok(Some(FleetDto {
                 id: fleet.id,
@@ -375,17 +369,12 @@ impl<'a> FleetService<'a> {
                     .map_err(|e| AppError::InternalError(format!("Invalid commander_id: {}", e)))?;
 
                 // Fetch commander nickname from guild
-                use crate::server::data::discord::UserDiscordGuildRepository;
-                let user_guild_repo = UserDiscordGuildRepository::new(self.db);
-                let commander_display_name = if let Ok(members) = user_guild_repo
-                    .get_guild_members_with_nicknames(guild_id)
-                    .await
+                use crate::server::data::discord::DiscordGuildMemberRepository;
+                let member_repo = DiscordGuildMemberRepository::new(self.db);
+                let commander_display_name = if let Ok(Some(member)) =
+                    member_repo.get_member(commander_id, guild_id).await
                 {
-                    members
-                        .iter()
-                        .find(|(user, _)| user.discord_id == commander.discord_id)
-                        .and_then(|(_, nickname)| nickname.clone())
-                        .unwrap_or_else(|| commander.name.clone())
+                    member.nickname.unwrap_or(member.username)
                 } else {
                     commander.name.clone()
                 };

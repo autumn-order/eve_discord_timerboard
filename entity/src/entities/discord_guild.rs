@@ -15,19 +15,25 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::discord_guild_channel::Entity")]
     DiscordGuildChannel,
+    #[sea_orm(has_many = "super::discord_guild_member::Entity")]
+    DiscordGuildMember,
     #[sea_orm(has_many = "super::discord_guild_role::Entity")]
     DiscordGuildRole,
     #[sea_orm(has_many = "super::fleet_category::Entity")]
     FleetCategory,
     #[sea_orm(has_many = "super::ping_format::Entity")]
     PingFormat,
-    #[sea_orm(has_many = "super::user_discord_guild::Entity")]
-    UserDiscordGuild,
 }
 
 impl Related<super::discord_guild_channel::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::DiscordGuildChannel.def()
+    }
+}
+
+impl Related<super::discord_guild_member::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::DiscordGuildMember.def()
     }
 }
 
@@ -46,25 +52,6 @@ impl Related<super::fleet_category::Entity> for Entity {
 impl Related<super::ping_format::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PingFormat.def()
-    }
-}
-
-impl Related<super::user_discord_guild::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::UserDiscordGuild.def()
-    }
-}
-
-impl Related<super::user::Entity> for Entity {
-    fn to() -> RelationDef {
-        super::user_discord_guild::Relation::User.def()
-    }
-    fn via() -> Option<RelationDef> {
-        Some(
-            super::user_discord_guild::Relation::DiscordGuild
-                .def()
-                .rev(),
-        )
     }
 }
 

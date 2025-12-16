@@ -69,8 +69,8 @@ impl<'a> DiscordGuildRepository<'a> {
         user_id: u64,
     ) -> Result<Vec<entity::discord_guild::Model>, DbErr> {
         entity::prelude::DiscordGuild::find()
-            .inner_join(entity::prelude::UserDiscordGuild)
-            .filter(entity::user_discord_guild::Column::UserId.eq(user_id.to_string()))
+            .inner_join(entity::prelude::DiscordGuildMember)
+            .filter(entity::discord_guild_member::Column::UserId.eq(user_id.to_string()))
             .all(self.db)
             .await
     }

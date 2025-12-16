@@ -15,9 +15,7 @@ use crate::{
         fleet::{CreateFleetDto, UpdateFleetDto},
     },
     server::{
-        data::{
-            category::FleetCategoryRepository, discord::user_guild::UserDiscordGuildRepository,
-        },
+        data::category::FleetCategoryRepository,
         error::{auth::AuthError, AppError},
         middleware::auth::{AuthGuard, Permission},
         service::fleet::FleetService,
@@ -147,18 +145,17 @@ pub async fn get_guild_members(
 ) -> Result<impl IntoResponse, AppError> {
     let _user = AuthGuard::new(&state.db, &session).require(&[]).await?;
 
-    let user_guild_repo = UserDiscordGuildRepository::new(&state.db);
-    let members = user_guild_repo
-        .get_guild_members_with_nicknames(guild_id)
-        .await?;
+    use crate::server::data::discord::DiscordGuildMemberRepository;
+    let member_repo = DiscordGuildMemberRepository::new(&state.db);
+    let members = member_repo.get_members_by_guild(guild_id).await?;
 
     let member_dtos: Vec<DiscordGuildMemberDto> = members
         .into_iter()
-        .map(|(user, nickname)| DiscordGuildMemberDto {
-            user_id: user.discord_id.parse().unwrap_or(0),
-            username: user.name.clone(),
+        .map(|member| DiscordGuildMemberDto {
+            user_id: member.user_id.parse().unwrap_or(0),
+            username: member.username.clone(),
             // Use nickname if available, otherwise fall back to username
-            display_name: nickname.unwrap_or_else(|| user.name.clone()),
+            display_name: member.nickname.unwrap_or_else(|| member.username),
             avatar_hash: None,
         })
         .collect();

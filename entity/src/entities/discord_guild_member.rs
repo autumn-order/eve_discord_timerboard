@@ -3,12 +3,13 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "user_discord_guild")]
+#[sea_orm(table_name = "discord_guild_member")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: String,
     #[sea_orm(primary_key, auto_increment = false)]
     pub guild_id: String,
+    pub username: String,
     pub nickname: Option<String>,
 }
 
@@ -22,25 +23,11 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     DiscordGuild,
-    #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::UserId",
-        to = "super::user::Column::DiscordId",
-        on_update = "Cascade",
-        on_delete = "Cascade"
-    )]
-    User,
 }
 
 impl Related<super::discord_guild::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::DiscordGuild.def()
-    }
-}
-
-impl Related<super::user::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::User.def()
     }
 }
 

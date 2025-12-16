@@ -415,7 +415,7 @@ impl<'a> FleetNotificationService<'a> {
         }
 
         // Build embed with description containing the fleet list
-        let mut embed = CreateEmbed::new()
+        let embed = CreateEmbed::new()
             .title(".:Upcoming Fleets:.")
             .url(&self.app_url)
             .description(description)

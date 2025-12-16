@@ -17,8 +17,6 @@ pub struct Model {
 pub enum Relation {
     #[sea_orm(has_many = "super::fleet::Entity")]
     Fleet,
-    #[sea_orm(has_many = "super::user_discord_guild::Entity")]
-    UserDiscordGuild,
     #[sea_orm(has_many = "super::user_discord_guild_role::Entity")]
     UserDiscordGuildRole,
 }
@@ -29,24 +27,9 @@ impl Related<super::fleet::Entity> for Entity {
     }
 }
 
-impl Related<super::user_discord_guild::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::UserDiscordGuild.def()
-    }
-}
-
 impl Related<super::user_discord_guild_role::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::UserDiscordGuildRole.def()
-    }
-}
-
-impl Related<super::discord_guild::Entity> for Entity {
-    fn to() -> RelationDef {
-        super::user_discord_guild::Relation::DiscordGuild.def()
-    }
-    fn via() -> Option<RelationDef> {
-        Some(super::user_discord_guild::Relation::User.def().rev())
     }
 }
 
