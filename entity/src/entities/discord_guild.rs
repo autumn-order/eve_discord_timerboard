@@ -9,6 +9,7 @@ pub struct Model {
     pub guild_id: String,
     pub name: String,
     pub icon_hash: Option<String>,
+    pub last_sync_at: DateTimeUtc,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

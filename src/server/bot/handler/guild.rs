@@ -12,6 +12,7 @@ use crate::server::service::discord::{
 ///
 /// This event fires on bot startup for each guild the bot is in, and when the bot joins a new guild.
 /// It syncs all guild data (metadata, roles, channels, members) to ensure the database is up-to-date.
+/// To prevent excessive syncs on frequent bot restarts, a 30-minute backoff is enforced.
 pub async fn handle_guild_create(
     db: &DatabaseConnection,
     ctx: Context,
@@ -31,10 +32,30 @@ pub async fn handle_guild_create(
 
     let guild_repo = DiscordGuildRepository::new(db);
 
+    // Always upsert basic guild metadata (name, icon)
     if let Err(e) = guild_repo.upsert(guild).await {
         tracing::error!("Failed to upsert guild: {:?}", e);
         return;
     }
+
+    // Check if a full sync is needed (30-minute backoff)
+    let needs_sync = match guild_repo.needs_sync(guild_id).await {
+        Ok(needs) => needs,
+        Err(e) => {
+            tracing::error!("Failed to check if guild needs sync: {:?}", e);
+            return;
+        }
+    };
+
+    if !needs_sync {
+        tracing::debug!(
+            "Skipping full sync for guild {} (synced within last 30 minutes)",
+            guild_id
+        );
+        return;
+    }
+
+    tracing::info!("Performing full sync for guild {}", guild_id);
 
     let role_service = DiscordGuildRoleService::new(db);
 
@@ -120,5 +141,12 @@ pub async fn handle_guild_create(
         .await
     {
         tracing::error!("Failed to sync guild member roles: {:?}", e);
+    }
+
+    // Update last sync timestamp after successful sync
+    if let Err(e) = guild_repo.update_last_sync(guild_id).await {
+        tracing::error!("Failed to update guild last sync timestamp: {:?}", e);
+    } else {
+        tracing::info!("Successfully synced guild {} data", guild_id);
     }
 }

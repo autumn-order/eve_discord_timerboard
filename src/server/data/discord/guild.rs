@@ -1,3 +1,4 @@
+use chrono::{Duration, Utc};
 use migration::OnConflict;
 use sea_orm::{ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 use serenity::all::Guild;
@@ -16,6 +17,7 @@ impl<'a> DiscordGuildRepository<'a> {
             guild_id: ActiveValue::Set(guild.id.get().to_string()),
             name: ActiveValue::Set(guild.name),
             icon_hash: ActiveValue::Set(guild.icon_hash.map(|i| i.to_string())),
+            last_sync_at: ActiveValue::NotSet,
         })
         .on_conflict(
             OnConflict::column(entity::discord_guild::Column::GuildId)
@@ -73,5 +75,54 @@ impl<'a> DiscordGuildRepository<'a> {
             .filter(entity::discord_guild_member::Column::UserId.eq(user_id.to_string()))
             .all(self.db)
             .await
+    }
+
+    /// Checks if a guild needs a full sync based on the last sync timestamp
+    ///
+    /// Returns true if the guild hasn't been synced in the last 30 minutes,
+    /// preventing excessive syncs on frequent bot restarts.
+    ///
+    /// # Arguments
+    /// - `guild_id`: Discord guild ID (u64)
+    ///
+    /// # Returns
+    /// - `Ok(true)`: Guild needs sync (never synced or > 30 minutes since last sync)
+    /// - `Ok(false)`: Guild was synced recently, skip sync
+    /// - `Err(DbErr)`: Database error during query
+    pub async fn needs_sync(&self, guild_id: u64) -> Result<bool, DbErr> {
+        let guild = self.find_by_guild_id(guild_id).await?;
+
+        match guild {
+            Some(guild) => {
+                let now = Utc::now();
+                let sync_threshold = Duration::minutes(30);
+                let needs_sync = now.signed_duration_since(guild.last_sync_at) > sync_threshold;
+                Ok(needs_sync)
+            }
+            None => Ok(true), // Guild not in DB, needs sync
+        }
+    }
+
+    /// Updates the last sync timestamp for a guild
+    ///
+    /// Called after successfully completing a full guild sync (roles, channels, members).
+    ///
+    /// # Arguments
+    /// - `guild_id`: Discord guild ID (u64)
+    ///
+    /// # Returns
+    /// - `Ok(())`: Timestamp updated successfully
+    /// - `Err(DbErr)`: Database error during update
+    pub async fn update_last_sync(&self, guild_id: u64) -> Result<(), DbErr> {
+        entity::prelude::DiscordGuild::update_many()
+            .filter(entity::discord_guild::Column::GuildId.eq(guild_id.to_string()))
+            .col_expr(
+                entity::discord_guild::Column::LastSyncAt,
+                sea_orm::sea_query::Expr::value(Utc::now().naive_utc()),
+            )
+            .exec(self.db)
+            .await?;
+
+        Ok(())
     }
 }

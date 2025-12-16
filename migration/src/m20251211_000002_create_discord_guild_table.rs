@@ -16,6 +16,11 @@ impl MigrationTrait for Migration {
                     .col(string_uniq(DiscordGuild::GuildId).primary_key())
                     .col(string(DiscordGuild::Name))
                     .col(string_null(DiscordGuild::IconHash))
+                    .col(
+                        timestamp(DiscordGuild::LastSyncAt)
+                            .default(Expr::current_timestamp())
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await
@@ -35,4 +40,5 @@ pub enum DiscordGuild {
     GuildId,
     Name,
     IconHash,
+    LastSyncAt,
 }
