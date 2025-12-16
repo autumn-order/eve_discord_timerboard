@@ -53,6 +53,7 @@ fn main() {
                 oauth_client,
                 admin_code_service,
                 discord_http,
+                config.app_url.clone(),
             ))
             .layer(session);
         router = router.merge(server_routes);

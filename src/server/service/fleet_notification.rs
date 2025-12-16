@@ -14,11 +14,12 @@ use crate::server::{
 pub struct FleetNotificationService<'a> {
     db: &'a DatabaseConnection,
     http: Arc<Http>,
+    app_url: String,
 }
 
 impl<'a> FleetNotificationService<'a> {
-    pub fn new(db: &'a DatabaseConnection, http: Arc<Http>) -> Self {
-        Self { db, http }
+    pub fn new(db: &'a DatabaseConnection, http: Arc<Http>, app_url: String) -> Self {
+        Self { db, http, app_url }
     }
 
     /// Posts fleet creation message to all configured channels
@@ -157,7 +158,14 @@ impl<'a> FleetNotificationService<'a> {
 
         // Build embed
         let embed = self
-            .build_fleet_embed(fleet, &fields, field_values, color, &commander_name)
+            .build_fleet_embed(
+                fleet,
+                &fields,
+                field_values,
+                color,
+                &commander_name,
+                &self.app_url,
+            )
             .await?;
 
         // Build ping content with title
@@ -269,17 +277,18 @@ impl<'a> FleetNotificationService<'a> {
         field_values: &std::collections::HashMap<i32, String>,
         color: u32,
         commander_name: &str,
+        app_url: &str,
     ) -> Result<CreateEmbed, AppError> {
         let commander_id = fleet
             .commander_id
             .parse::<u64>()
             .map_err(|e| AppError::InternalError(format!("Invalid commander ID: {}", e)))?;
 
-        let mut embed = CreateEmbed::new().title(&fleet.name).color(color).field(
-            "FC",
-            format!("<@{}>", commander_id),
-            false,
-        );
+        let mut embed = CreateEmbed::new()
+            .title(&fleet.name)
+            .url(app_url)
+            .color(color)
+            .field("FC", format!("<@{}>", commander_id), false);
 
         // Use current time for "sent at" timestamp
         let now = chrono::Utc::now();

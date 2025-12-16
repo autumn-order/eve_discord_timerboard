@@ -30,6 +30,7 @@ pub struct AppState {
     pub oauth_client: OAuth2Client,
     pub admin_code_service: AdminCodeService,
     pub discord_http: Arc<Http>,
+    pub app_url: String,
 }
 
 impl AppState {
@@ -39,6 +40,7 @@ impl AppState {
         oauth_client: OAuth2Client,
         admin_code_service: AdminCodeService,
         discord_http: Arc<Http>,
+        app_url: String,
     ) -> Self {
         Self {
             db,
@@ -46,6 +48,7 @@ impl AppState {
             oauth_client,
             admin_code_service,
             discord_http,
+            app_url,
         }
     }
 }

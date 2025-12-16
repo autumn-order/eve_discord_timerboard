@@ -19,11 +19,16 @@ use crate::{
 pub struct FleetService<'a> {
     db: &'a DatabaseConnection,
     discord_http: Arc<Http>,
+    app_url: String,
 }
 
 impl<'a> FleetService<'a> {
-    pub fn new(db: &'a DatabaseConnection, discord_http: Arc<Http>) -> Self {
-        Self { db, discord_http }
+    pub fn new(db: &'a DatabaseConnection, discord_http: Arc<Http>, app_url: String) -> Self {
+        Self {
+            db,
+            discord_http,
+            app_url,
+        }
     }
 
     /// Creates a new fleet
@@ -69,7 +74,7 @@ impl<'a> FleetService<'a> {
 
         // Post fleet creation notification to Discord
         let notification_service =
-            FleetNotificationService::new(self.db, self.discord_http.clone());
+            FleetNotificationService::new(self.db, self.discord_http.clone(), self.app_url.clone());
         notification_service
             .post_fleet_creation(&fleet, &dto.field_values)
             .await?;
