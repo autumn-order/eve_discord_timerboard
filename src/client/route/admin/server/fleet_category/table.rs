@@ -73,9 +73,9 @@ pub fn FleetCategoriesTable(
                     tr {
                         th { "Name" }
                         th { "Ping Format" }
-                        th { class: "text-center", "Upcoming Fleets" }
-                        th { class: "text-center", "All-time Total" }
-                        th { class: "text-center", "Configured Roles" }
+                        th { class: "text-center", "Cooldown" }
+                        th { class: "text-center", "Reminder" }
+                        th { class: "text-center", "Max Pre-Ping" }
                         th {
                             class: "text-right",
                             "Actions"
@@ -88,13 +88,35 @@ pub fn FleetCategoriesTable(
                             let category_id = category.id;
                             let category_name = category.name.clone();
                             let category_name_for_delete = category_name.clone();
+
+                            // Format duration helper
+                            let format_duration = |duration: &Option<chrono::Duration>| -> String {
+                                if let Some(d) = duration {
+                                    let hours = d.num_hours();
+                                    let minutes = d.num_minutes() % 60;
+                                    if hours > 0 && minutes > 0 {
+                                        format!("{}h {}m", hours, minutes)
+                                    } else if hours > 0 {
+                                        format!("{}h", hours)
+                                    } else {
+                                        format!("{}m", minutes)
+                                    }
+                                } else {
+                                    "—".to_string()
+                                }
+                            };
+
+                            let lead_time_str = format_duration(&category.ping_lead_time);
+                            let reminder_str = format_duration(&category.ping_reminder);
+                            let max_pre_ping_str = format_duration(&category.max_pre_ping);
+
                             rsx! {
                                 tr {
                                     td { "{category.name}" }
                                     td { "{category.ping_format_name}" }
-                                    td { class: "text-center", "0" }
-                                    td { class: "text-center", "0" }
-                                    td { class: "text-center", "0" }
+                                    td { class: "text-center", "{lead_time_str}" }
+                                    td { class: "text-center", "{reminder_str}" }
+                                    td { class: "text-center", "{max_pre_ping_str}" }
                                     td {
                                         div {
                                             class: "flex gap-2 justify-end",
