@@ -115,6 +115,7 @@ pub struct PingFormatFieldDto {
     pub id: i32,
     pub name: String,
     pub priority: i32,
+    pub default_value: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

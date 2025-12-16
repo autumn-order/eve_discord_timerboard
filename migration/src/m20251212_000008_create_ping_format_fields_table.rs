@@ -17,6 +17,7 @@ impl MigrationTrait for Migration {
                     .col(big_unsigned(PingFormatField::PingFormatId))
                     .col(string(PingFormatField::Name))
                     .col(integer(PingFormatField::Priority).default(0))
+                    .col(string_null(PingFormatField::DefaultValue))
                     .foreign_key(
                         ForeignKey::create()
                             .name("fk_ping_format_field_ping_format_id")
@@ -44,4 +45,5 @@ pub enum PingFormatField {
     PingFormatId,
     Name,
     Priority,
+    DefaultValue,
 }

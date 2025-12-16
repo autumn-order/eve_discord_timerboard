@@ -105,11 +105,13 @@ impl<'a> PingFormatFieldRepository<'a> {
         ping_format_id: i32,
         name: String,
         priority: i32,
+        default_value: Option<String>,
     ) -> Result<entity::ping_format_field::Model, DbErr> {
         entity::ping_format_field::ActiveModel {
             ping_format_id: ActiveValue::Set(ping_format_id),
             name: ActiveValue::Set(name),
             priority: ActiveValue::Set(priority),
+            default_value: ActiveValue::Set(default_value),
             ..Default::default()
         }
         .insert(self.db)
@@ -128,12 +130,13 @@ impl<'a> PingFormatFieldRepository<'a> {
             .await
     }
 
-    /// Updates a ping format field's name and priority
+    /// Updates a ping format field's name, priority, and default value
     pub async fn update(
         &self,
         id: i32,
         name: String,
         priority: i32,
+        default_value: Option<String>,
     ) -> Result<entity::ping_format_field::Model, DbErr> {
         let field = entity::prelude::PingFormatField::find_by_id(id)
             .one(self.db)
@@ -146,6 +149,7 @@ impl<'a> PingFormatFieldRepository<'a> {
         let mut active_model: entity::ping_format_field::ActiveModel = field.into();
         active_model.name = ActiveValue::Set(name);
         active_model.priority = ActiveValue::Set(priority);
+        active_model.default_value = ActiveValue::Set(default_value);
 
         active_model.update(self.db).await
     }

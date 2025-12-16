@@ -11,6 +11,7 @@ pub struct PingFormatDto {
     pub name: String,
     pub fields: Vec<PingFormatFieldDto>,
     pub fleet_category_count: u64,
+    pub fleet_category_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -19,6 +20,7 @@ pub struct PingFormatFieldDto {
     pub ping_format_id: i32,
     pub name: String,
     pub priority: i32,
+    pub default_value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,7 @@ pub struct CreatePingFormatDto {
 pub struct CreatePingFormatFieldDto {
     pub name: String,
     pub priority: i32,
+    pub default_value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +47,7 @@ pub struct UpdatePingFormatFieldDto {
     pub id: Option<i32>,
     pub name: String,
     pub priority: i32,
+    pub default_value: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

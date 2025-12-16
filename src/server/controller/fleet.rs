@@ -68,6 +68,7 @@ pub async fn get_category_details(
             id: f.id,
             name: f.name,
             priority: f.priority,
+            default_value: f.default_value,
         })
         .collect();
 

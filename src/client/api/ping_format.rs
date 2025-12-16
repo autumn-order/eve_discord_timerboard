@@ -29,14 +29,18 @@ pub async fn get_ping_formats(
 pub async fn create_ping_format(
     guild_id: u64,
     name: String,
-    fields: Vec<(String, i32)>, // (name, priority)
+    fields: Vec<(String, i32, Option<String>)>, // (name, priority, default_value)
 ) -> Result<(), ApiError> {
     let url = format!("/api/admin/servers/{}/formats", guild_id);
     let payload = CreatePingFormatDto {
         name,
         fields: fields
             .into_iter()
-            .map(|(name, priority)| CreatePingFormatFieldDto { name, priority })
+            .map(|(name, priority, default_value)| CreatePingFormatFieldDto {
+                name,
+                priority,
+                default_value,
+            })
             .collect(),
     };
     let body = serialize_json(&payload)?;
@@ -50,14 +54,21 @@ pub async fn update_ping_format(
     guild_id: u64,
     format_id: i32,
     name: String,
-    fields: Vec<(Option<i32>, String, i32)>, // (id, name, priority)
+    fields: Vec<(Option<i32>, String, i32, Option<String>)>, // (id, name, priority, default_value)
 ) -> Result<(), ApiError> {
     let url = format!("/api/admin/servers/{}/formats/{}", guild_id, format_id);
     let payload = UpdatePingFormatDto {
         name,
         fields: fields
             .into_iter()
-            .map(|(id, name, priority)| UpdatePingFormatFieldDto { id, name, priority })
+            .map(
+                |(id, name, priority, default_value)| UpdatePingFormatFieldDto {
+                    id,
+                    name,
+                    priority,
+                    default_value,
+                },
+            )
             .collect(),
     };
     let body = serialize_json(&payload)?;

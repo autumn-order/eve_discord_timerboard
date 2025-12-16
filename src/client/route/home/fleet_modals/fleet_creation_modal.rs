@@ -155,6 +155,32 @@ pub fn FleetCreationModal(
         }
     });
 
+    // Reset form when modal opens/closes
+    use_effect(use_reactive!(|show| {
+        if show() {
+            // Reset form fields when modal opens
+            fleet_name.set(String::new());
+            fleet_description.set(String::new());
+            field_values.set(HashMap::new());
+        }
+    }));
+
+    // Pre-fill field values with defaults when category details change
+    use_effect(use_reactive!(|category_details| {
+        if let Some(Ok(details)) = category_details() {
+            let mut defaults = HashMap::new();
+            for field in &details.fields {
+                if let Some(default_val) = &field.default_value {
+                    if !default_val.is_empty() {
+                        defaults.insert(field.id, default_val.clone());
+                    }
+                }
+            }
+            // Always set field_values to defaults (empty map if no defaults)
+            field_values.set(defaults);
+        }
+    }));
+
     // Fetch guild members
     #[cfg(feature = "web")]
     let guild_members_resource =

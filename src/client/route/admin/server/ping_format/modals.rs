@@ -18,6 +18,7 @@ struct FieldData {
     id: Option<i32>,
     name: String,
     priority: i32,
+    default_value: String,
 }
 
 #[component]
@@ -27,7 +28,8 @@ pub fn CreatePingFormatModal(
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let mut form_fields = use_signal(FormFieldsData::default);
-    let mut submit_data = use_signal(|| (String::new(), Vec::<(String, i32)>::new()));
+    let mut submit_data =
+        use_signal(|| (String::new(), Vec::<(String, i32, Option<String>)>::new()));
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
 
@@ -80,12 +82,19 @@ pub fn CreatePingFormatModal(
         }
 
         error.set(None);
-        let field_data: Vec<(String, i32)> = fields
+        let field_data: Vec<(String, i32, Option<String>)> = fields
             .fields
             .iter()
             .enumerate()
             .filter(|(_, f)| !f.name.trim().is_empty())
-            .map(|(index, f)| (f.name.clone(), index as i32))
+            .map(|(index, f)| {
+                let default_val = if f.default_value.trim().is_empty() {
+                    None
+                } else {
+                    Some(f.default_value.clone())
+                };
+                (f.name.clone(), index as i32, default_val)
+            })
             .collect();
 
         submit_data.set((fields.name, field_data));
@@ -155,7 +164,7 @@ pub fn EditPingFormatModal(
         (
             0i32,
             String::new(),
-            Vec::<(Option<i32>, String, i32)>::new(),
+            Vec::<(Option<i32>, String, i32, Option<String>)>::new(),
         )
     });
     let mut should_submit = use_signal(|| false);
@@ -174,6 +183,7 @@ pub fn EditPingFormatModal(
                             id: Some(f.id),
                             name: f.name.clone(),
                             priority: f.priority,
+                            default_value: f.default_value.clone().unwrap_or_default(),
                         })
                         .collect(),
                 });
@@ -223,12 +233,19 @@ pub fn EditPingFormatModal(
         }
 
         error.set(None);
-        let field_data: Vec<(Option<i32>, String, i32)> = fields
+        let field_data: Vec<(Option<i32>, String, i32, Option<String>)> = fields
             .fields
             .iter()
             .enumerate()
             .filter(|(_, f)| !f.name.trim().is_empty())
-            .map(|(index, f)| (f.id, f.name.clone(), index as i32))
+            .map(|(index, f)| {
+                let default_val = if f.default_value.trim().is_empty() {
+                    None
+                } else {
+                    Some(f.default_value.clone())
+                };
+                (f.id, f.name.clone(), index as i32, default_val)
+            })
             .collect();
 
         let id = submit_data().0;
@@ -372,43 +389,57 @@ fn PingFormatFormFields(mut form_fields: Signal<FormFieldsData>, is_submitting: 
                 for (index, field) in form_fields().fields.iter().enumerate() {
                     {
                         let field_name = field.name.clone();
+                        let field_default = field.default_value.clone();
                         let is_dragging = dragging_index() == Some(index);
                         rsx! {
                             div {
                                 key: "{index}",
                                 class: if is_dragging {
-                                    "flex items-center gap-3 p-3 bg-base-100 rounded-box opacity-50"
+                                    "flex flex-col gap-2 p-3 bg-base-100 rounded-box opacity-50"
                                 } else {
-                                    "flex items-center gap-3 p-3 bg-base-100 rounded-box"
+                                    "flex flex-col gap-2 p-3 bg-base-100 rounded-box"
                                 },
                                 ondragover: on_drag_over,
                                 ondrop: on_drop(index),
                                 div {
-                                    class: "cursor-move text-xl opacity-50 hover:opacity-100 select-none flex-shrink-0",
-                                    title: "Drag to reorder",
-                                    draggable: !is_submitting,
-                                    ondragstart: on_drag_start(index),
-                                    ondragend: on_drag_end,
-                                    "⠿"
+                                    class: "flex items-center gap-3",
+                                    div {
+                                        class: "cursor-move text-xl opacity-50 hover:opacity-100 select-none flex-shrink-0",
+                                        title: "Drag to reorder",
+                                        draggable: !is_submitting,
+                                        ondragstart: on_drag_start(index),
+                                        ondragend: on_drag_end,
+                                        "⠿"
+                                    }
+                                    input {
+                                        r#type: "text",
+                                        class: "input input-bordered flex-1",
+                                        placeholder: "Field name",
+                                        value: "{field_name}",
+                                        disabled: is_submitting,
+                                        oninput: move |evt| {
+                                            form_fields.write().fields[index].name = evt.value();
+                                        }
+                                    }
+                                    button {
+                                        r#type: "button",
+                                        class: "btn btn-sm btn-error btn-square flex-shrink-0",
+                                        disabled: is_submitting,
+                                        onclick: move |_| {
+                                            form_fields.write().fields.remove(index);
+                                        },
+                                        "✕"
+                                    }
                                 }
                                 input {
                                     r#type: "text",
-                                    class: "input input-bordered flex-1",
-                                    placeholder: "Field name",
-                                    value: "{field_name}",
+                                    class: "input input-bordered input-sm w-full",
+                                    placeholder: "Default value (optional)",
+                                    value: "{field_default}",
                                     disabled: is_submitting,
                                     oninput: move |evt| {
-                                        form_fields.write().fields[index].name = evt.value();
+                                        form_fields.write().fields[index].default_value = evt.value();
                                     }
-                                }
-                                button {
-                                    r#type: "button",
-                                    class: "btn btn-sm btn-error btn-square flex-shrink-0",
-                                    disabled: is_submitting,
-                                    onclick: move |_| {
-                                        form_fields.write().fields.remove(index);
-                                    },
-                                    "✕"
                                 }
                             }
                         }

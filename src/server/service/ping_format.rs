@@ -3,7 +3,10 @@ use sea_orm::DatabaseConnection;
 use crate::{
     model::ping_format::{PaginatedPingFormatsDto, PingFormatDto, PingFormatFieldDto},
     server::{
-        data::ping_format::{PingFormatFieldRepository, PingFormatRepository},
+        data::{
+            category::FleetCategoryRepository,
+            ping_format::{PingFormatFieldRepository, PingFormatRepository},
+        },
         error::AppError,
     },
 };
@@ -22,7 +25,7 @@ impl<'a> PingFormatService<'a> {
         &self,
         guild_id: u64,
         name: String,
-        fields: Vec<(String, i32)>, // (name, priority)
+        fields: Vec<(String, i32, Option<String>)>, // (name, priority, default_value)
     ) -> Result<PingFormatDto, AppError> {
         let format_repo = PingFormatRepository::new(self.db);
         let field_repo = PingFormatFieldRepository::new(self.db);
@@ -32,15 +35,16 @@ impl<'a> PingFormatService<'a> {
 
         // Create all the fields
         let mut result_fields = Vec::new();
-        for (field_name, priority) in fields {
+        for (field_name, priority, default_value) in fields {
             let field = field_repo
-                .create(ping_format.id, field_name, priority)
+                .create(ping_format.id, field_name, priority, default_value.clone())
                 .await?;
             result_fields.push(PingFormatFieldDto {
                 id: field.id,
                 ping_format_id: field.ping_format_id,
                 name: field.name,
                 priority: field.priority,
+                default_value: field.default_value,
             });
         }
 
@@ -52,12 +56,18 @@ impl<'a> PingFormatService<'a> {
             .parse::<u64>()
             .map_err(|e| AppError::InternalError(format!("Failed to parse guild_id: {}", e)))?;
 
+        // Get fleet categories using this ping format
+        let category_repo = FleetCategoryRepository::new(self.db);
+        let categories = category_repo.get_by_ping_format_id(ping_format.id).await?;
+        let fleet_category_names: Vec<String> = categories.into_iter().map(|c| c.name).collect();
+
         Ok(PingFormatDto {
             id: ping_format.id,
             guild_id,
             name: ping_format.name,
             fields: result_fields,
             fleet_category_count,
+            fleet_category_names,
         })
     }
 
@@ -81,11 +91,18 @@ impl<'a> PingFormatService<'a> {
             0
         };
 
+        let category_repo = FleetCategoryRepository::new(self.db);
+
         let mut ping_format_dtos = Vec::new();
         for ping_format in ping_formats {
             let fields = field_repo.get_by_ping_format_id(ping_format.id).await?;
 
             let fleet_category_count = format_repo.get_fleet_category_count(ping_format.id).await?;
+
+            // Get fleet categories using this ping format
+            let categories = category_repo.get_by_ping_format_id(ping_format.id).await?;
+            let fleet_category_names: Vec<String> =
+                categories.into_iter().map(|c| c.name).collect();
 
             let guild_id = ping_format
                 .guild_id
@@ -103,9 +120,11 @@ impl<'a> PingFormatService<'a> {
                         ping_format_id: f.ping_format_id,
                         name: f.name,
                         priority: f.priority,
+                        default_value: f.default_value,
                     })
                     .collect(),
                 fleet_category_count,
+                fleet_category_names,
             });
         }
 
@@ -125,7 +144,7 @@ impl<'a> PingFormatService<'a> {
         id: i32,
         guild_id: u64,
         name: String,
-        fields: Vec<(Option<i32>, String, i32)>, // (id, name, priority) - id is None for new fields
+        fields: Vec<(Option<i32>, String, i32, Option<String>)>, // (id, name, priority, default_value) - id is None for new fields
     ) -> Result<Option<PingFormatDto>, AppError> {
         let format_repo = PingFormatRepository::new(self.db);
         let field_repo = PingFormatFieldRepository::new(self.db);
@@ -145,27 +164,31 @@ impl<'a> PingFormatService<'a> {
         let mut updated_fields = Vec::new();
         let mut existing_field_ids: Vec<i32> = Vec::new();
 
-        for (field_id, field_name, priority) in fields {
+        for (field_id, field_name, priority, default_value) in fields {
             if let Some(id) = field_id {
                 // Update existing field
-                let field = field_repo.update(id, field_name, priority).await?;
+                let field = field_repo
+                    .update(id, field_name, priority, default_value.clone())
+                    .await?;
                 existing_field_ids.push(id);
                 updated_fields.push(PingFormatFieldDto {
                     id: field.id,
                     ping_format_id: field.ping_format_id,
                     name: field.name,
                     priority: field.priority,
+                    default_value: field.default_value,
                 });
             } else {
                 // Create new field
                 let field = field_repo
-                    .create(ping_format.id, field_name, priority)
+                    .create(ping_format.id, field_name, priority, default_value.clone())
                     .await?;
                 updated_fields.push(PingFormatFieldDto {
                     id: field.id,
                     ping_format_id: field.ping_format_id,
                     name: field.name,
                     priority: field.priority,
+                    default_value: field.default_value,
                 });
             }
         }
@@ -185,12 +208,18 @@ impl<'a> PingFormatService<'a> {
             .parse::<u64>()
             .map_err(|e| AppError::InternalError(format!("Failed to parse guild_id: {}", e)))?;
 
+        // Get fleet categories using this ping format
+        let category_repo = FleetCategoryRepository::new(self.db);
+        let categories = category_repo.get_by_ping_format_id(ping_format.id).await?;
+        let fleet_category_names: Vec<String> = categories.into_iter().map(|c| c.name).collect();
+
         Ok(Some(PingFormatDto {
             id: ping_format.id,
             guild_id,
             name: ping_format.name,
             fields: updated_fields,
             fleet_category_count,
+            fleet_category_names,
         }))
     }
 

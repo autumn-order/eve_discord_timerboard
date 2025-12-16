@@ -43,10 +43,10 @@ pub async fn create_ping_format(
 
     let service = PingFormatService::new(&state.db);
 
-    let fields: Vec<(String, i32)> = payload
+    let fields: Vec<(String, i32, Option<String>)> = payload
         .fields
         .into_iter()
-        .map(|f| (f.name, f.priority))
+        .map(|f| (f.name, f.priority, f.default_value))
         .collect();
 
     let ping_format = service.create(guild_id, payload.name, fields).await?;
@@ -89,10 +89,10 @@ pub async fn update_ping_format(
 
     let service = PingFormatService::new(&state.db);
 
-    let fields: Vec<(Option<i32>, String, i32)> = payload
+    let fields: Vec<(Option<i32>, String, i32, Option<String>)> = payload
         .fields
         .into_iter()
-        .map(|f| (f.id, f.name, f.priority))
+        .map(|f| (f.id, f.name, f.priority, f.default_value))
         .collect();
 
     let ping_format = service
@@ -109,6 +109,7 @@ pub async fn update_ping_format(
                 name: String::new(),
                 fields: Vec::new(),
                 fleet_category_count: 0,
+                fleet_category_names: Vec::new(),
             }),
         )),
     }

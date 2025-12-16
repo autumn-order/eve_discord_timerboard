@@ -73,7 +73,7 @@ pub fn PingFormatsTable(
                     tr {
                         th { "Name" }
                         th { "Fields" }
-                        th { class: "text-center", "Fleet Categories" }
+                        th { "Fleet Categories" }
                         th {
                             class: "text-right",
                             "Actions"
@@ -88,8 +88,10 @@ pub fn PingFormatsTable(
                             let format_clone_for_edit = format.clone();
                             let format_name_for_delete = format_name.clone();
                             let fleet_category_count = format.fleet_category_count;
+                            let fleet_category_names = format.fleet_category_names.clone();
                             let field_names: Vec<String> = format.fields.iter().map(|f| f.name.clone()).collect();
                             let field_display = field_names.join(", ");
+                            let category_display = fleet_category_names.join(", ");
                             rsx! {
                                 tr {
                                     td { "{format.name}" }
@@ -100,7 +102,14 @@ pub fn PingFormatsTable(
                                             span { "{field_display}" }
                                         }
                                     }
-                                    td { class: "text-center", "{fleet_category_count}" }
+                                    td {
+                                        class: "max-w-xs break-words",
+                                        if fleet_category_names.is_empty() {
+                                            span { class: "opacity-50", "No categories" }
+                                        } else {
+                                            span { "{category_display}" }
+                                        }
+                                    }
                                     td {
                                         div {
                                             class: "flex gap-2 justify-end",
