@@ -1,6 +1,7 @@
 use chrono::{Datelike, TimeZone, Timelike, Utc};
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
+use pulldown_cmark::{html, Options, Parser};
 use std::collections::HashMap;
 
 use crate::{
@@ -550,10 +551,21 @@ pub fn FleetViewEditModal(
                                         "Description"
                                     }
                                     div {
-                                        class: "textarea textarea-bordered h-32 w-full bg-base-200 whitespace-pre-wrap overflow-y-auto",
+                                        class: "textarea textarea-bordered h-32 w-full bg-base-200 overflow-y-auto prose prose-sm max-w-none",
                                         if let Some(desc) = &fleet.description {
                                             if !desc.is_empty() {
-                                                "{desc}"
+                                                // Parse markdown to HTML
+                                                {
+                                                    let options = Options::all();
+                                                    let parser = Parser::new_ext(desc, options);
+                                                    let mut html_output = String::new();
+                                                    html::push_html(&mut html_output, parser);
+                                                    rsx! {
+                                                        div {
+                                                            dangerous_inner_html: "{html_output}"
+                                                        }
+                                                    }
+                                                }
                                             } else {
                                                 span { class: "opacity-50 italic", "No description provided" }
                                             }

@@ -21,6 +21,7 @@ dotenvy = { version = "0.15.7", optional = true }
 entity = { path = "entity", optional = true }
 migration = { path = "migration", optional = true }
 oauth2 = { version = "5.0.0", optional = true }
+pulldown-cmark = "0.9.6"
 rand = { version = "0.9.2", optional = true }
 reqwasm = { version = "0.5.0", optional = true }
 reqwest = { version = "0.12.25", optional = true }
