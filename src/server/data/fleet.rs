@@ -35,6 +35,8 @@ impl<'a> FleetRepository<'a> {
         fleet_time: DateTime<Utc>,
         description: Option<String>,
         field_values: HashMap<i32, String>,
+        hidden: bool,
+        disable_reminder: bool,
     ) -> Result<entity::fleet::Model, DbErr> {
         // Create the fleet
         let fleet = entity::fleet::ActiveModel {
@@ -43,6 +45,8 @@ impl<'a> FleetRepository<'a> {
             commander_id: ActiveValue::Set(commander_id.to_string()),
             fleet_time: ActiveValue::Set(fleet_time),
             description: ActiveValue::Set(description),
+            hidden: ActiveValue::Set(hidden),
+            disable_reminder: ActiveValue::Set(disable_reminder),
             created_at: ActiveValue::Set(Utc::now()),
             ..Default::default()
         }
@@ -273,6 +277,8 @@ impl<'a> FleetRepository<'a> {
         fleet_time: Option<DateTime<Utc>>,
         description: Option<Option<String>>,
         field_values: Option<HashMap<i32, String>>,
+        hidden: Option<bool>,
+        disable_reminder: Option<bool>,
     ) -> Result<entity::fleet::Model, DbErr> {
         let fleet = entity::prelude::Fleet::find_by_id(id)
             .one(self.db)
@@ -292,6 +298,12 @@ impl<'a> FleetRepository<'a> {
         }
         if let Some(description) = description {
             active_model.description = ActiveValue::Set(description);
+        }
+        if let Some(hidden) = hidden {
+            active_model.hidden = ActiveValue::Set(hidden);
+        }
+        if let Some(disable_reminder) = disable_reminder {
+            active_model.disable_reminder = ActiveValue::Set(disable_reminder);
         }
 
         let updated_fleet = active_model.update(self.db).await?;

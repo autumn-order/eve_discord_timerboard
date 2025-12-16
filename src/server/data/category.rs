@@ -477,6 +477,98 @@ impl<'a> FleetCategoryRepository<'a> {
         Ok(guild_category_ids)
     }
 
+    /// Gets category IDs where user has create permission
+    pub async fn get_creatable_category_ids_by_user(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+    ) -> Result<Vec<i32>, DbErr> {
+        // First, get all role IDs that the user has in this guild
+        let user_role_ids: Vec<String> = entity::prelude::UserDiscordGuildRole::find()
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.role_id)
+            .collect();
+
+        if user_role_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Find all category IDs where the user has can_create permission
+        let category_ids: Vec<i32> = entity::prelude::FleetCategoryAccessRole::find()
+            .filter(entity::fleet_category_access_role::Column::RoleId.is_in(user_role_ids))
+            .filter(entity::fleet_category_access_role::Column::CanCreate.eq(true))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.fleet_category_id)
+            .collect();
+
+        if category_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Verify these categories belong to the specified guild
+        let guild_category_ids: Vec<i32> = entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::GuildId.eq(guild_id.to_string()))
+            .filter(entity::fleet_category::Column::Id.is_in(category_ids))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+
+        Ok(guild_category_ids)
+    }
+
+    /// Gets category IDs where user has manage permission
+    pub async fn get_manageable_category_ids_by_user(
+        &self,
+        user_id: u64,
+        guild_id: u64,
+    ) -> Result<Vec<i32>, DbErr> {
+        // First, get all role IDs that the user has in this guild
+        let user_role_ids: Vec<String> = entity::prelude::UserDiscordGuildRole::find()
+            .filter(entity::user_discord_guild_role::Column::UserId.eq(user_id.to_string()))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.role_id)
+            .collect();
+
+        if user_role_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Find all category IDs where the user has can_manage permission
+        let category_ids: Vec<i32> = entity::prelude::FleetCategoryAccessRole::find()
+            .filter(entity::fleet_category_access_role::Column::RoleId.is_in(user_role_ids))
+            .filter(entity::fleet_category_access_role::Column::CanManage.eq(true))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|r| r.fleet_category_id)
+            .collect();
+
+        if category_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Verify these categories belong to the specified guild
+        let guild_category_ids: Vec<i32> = entity::prelude::FleetCategory::find()
+            .filter(entity::fleet_category::Column::GuildId.eq(guild_id.to_string()))
+            .filter(entity::fleet_category::Column::Id.is_in(category_ids))
+            .all(self.db)
+            .await?
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+
+        Ok(guild_category_ids)
+    }
+
     /// Checks if a user has view access to a specific category
     pub async fn user_can_view_category(
         &self,

@@ -71,6 +71,10 @@ pub fn FleetViewEditModal(
     let mut fleet_description = use_signal(|| String::new());
     let mut field_values = use_signal(|| HashMap::<i32, String>::new());
 
+    // Fleet visibility options
+    let mut hidden = use_signal(|| false);
+    let mut disable_reminder = use_signal(|| false);
+
     // Submission state
     let mut is_submitting = use_signal(|| false);
     let mut submission_error = use_signal(|| None::<String>);
@@ -212,6 +216,8 @@ pub fn FleetViewEditModal(
                         fleet_commander_id.set(Some(fleet.commander_id));
                         fleet_description.set(fleet.description.clone().unwrap_or_default());
                         selected_category_id.set(fleet.category_id);
+                        hidden.set(fleet.hidden);
+                        disable_reminder.set(fleet.disable_reminder);
 
                         // Convert field_values from field_name->value to field_id->value
                         // We'll need to get the field IDs from category details
@@ -429,6 +435,8 @@ pub fn FleetViewEditModal(
                         Some(fleet_description())
                     },
                     field_values: field_values(),
+                    hidden: hidden(),
+                    disable_reminder: disable_reminder(),
                 };
                 Some(update_fleet(guild_id, id, dto).await)
             } else {
@@ -703,6 +711,8 @@ pub fn FleetViewEditModal(
                                     guild_members: use_signal(move || guild_members.clone()),
                                     is_submitting: is_submitting(),
                                     current_user_id,
+                                    hidden,
+                                    disable_reminder,
                                     selected_category_id: Some(selected_category_id),
                                     manageable_categories: Some(use_signal(move || manageable_categories.clone())),
                                     allow_past_time: allow_past,
@@ -756,9 +766,8 @@ pub fn FleetViewEditModal(
                                         fleet_commander_id.set(Some(fleet.commander_id));
                                         fleet_description.set(fleet.description.clone().unwrap_or_default());
                                         selected_category_id.set(fleet.category_id);
-                                        original_fleet_time.set(Some(fleet.fleet_time));
-                                        // Reset field values (will be repopulated by category details effect)
-                                        field_values.set(HashMap::new());
+                                        hidden.set(fleet.hidden);
+                                        disable_reminder.set(fleet.disable_reminder);
                                     }
                                 },
                                 "Cancel"

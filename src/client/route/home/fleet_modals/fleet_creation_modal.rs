@@ -62,6 +62,10 @@ pub fn FleetCreationModal(
     let mut fleet_description = use_signal(|| String::new());
     let mut field_values = use_signal(|| std::collections::HashMap::<i32, String>::new());
 
+    // Fleet visibility options
+    let mut hidden = use_signal(|| false);
+    let mut disable_reminder = use_signal(|| false);
+
     // Submission state
     let mut is_submitting = use_signal(|| false);
     let mut submission_error = use_signal(|| None::<String>);
@@ -84,6 +88,8 @@ pub fn FleetCreationModal(
                     Some(fleet_description())
                 },
                 field_values: field_values(),
+                hidden: hidden(),
+                disable_reminder: disable_reminder(),
             };
             Some(create_fleet(guild_id, dto).await)
         } else {
@@ -101,6 +107,8 @@ pub fn FleetCreationModal(
                     fleet_name.set(String::new());
                     fleet_description.set(String::new());
                     field_values.set(HashMap::new());
+                    hidden.set(false);
+                    disable_reminder.set(false);
                     is_submitting.set(false);
                     show.set(false);
                     // Notify parent to refetch fleets
@@ -253,6 +261,8 @@ pub fn FleetCreationModal(
             fleet_name.set(String::new());
             fleet_description.set(String::new());
             field_values.set(HashMap::new());
+            hidden.set(false);
+            disable_reminder.set(false);
         }
     }));
 
@@ -341,6 +351,8 @@ pub fn FleetCreationModal(
                     guild_members: use_signal(move || guild_members.clone()),
                     is_submitting: is_submitting(),
                     current_user_id,
+                    hidden,
+                    disable_reminder,
                     selected_category_id: Some(selected_category_id),
                     manageable_categories: Some(use_signal(move || manageable_categories.clone())),
                     datetime_error_signal: Some(datetime_error),

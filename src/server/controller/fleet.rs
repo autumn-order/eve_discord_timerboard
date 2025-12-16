@@ -186,6 +186,19 @@ pub async fn create_fleet(
 
 /// GET /api/guilds/{guild_id}/fleets/{fleet_id}
 /// Get fleet details by ID
+///
+/// # Visibility Rules
+/// Returns a fleet (200 OK) only if ALL of the following are true:
+/// 1. User has at least one permission (view, create, or manage) for the fleet's category
+/// 2. If the fleet is marked as `hidden`:
+///    - User has create OR manage permission for the category, OR
+///    - The category's reminder time has elapsed (calculated as fleet_time - ping_reminder), OR
+///    - If no reminder is configured, the fleet start time has passed
+/// 3. Admins bypass all permission and visibility restrictions
+///
+/// # Returns
+/// - 200 OK with FleetDto if fleet exists and user has permission to view it
+/// - 404 Not Found if fleet doesn't exist OR user lacks permission (doesn't leak existence)
 pub async fn get_fleet(
     State(state): State<AppState>,
     session: Session,
@@ -193,43 +206,16 @@ pub async fn get_fleet(
 ) -> Result<impl IntoResponse, AppError> {
     let user = AuthGuard::new(&state.db, &session).require(&[]).await?;
 
-    let fleet_service = FleetService::new(&state.db);
-    let fleet = fleet_service
-        .get_by_id(fleet_id, guild_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
-
-    // Verify the fleet belongs to this guild
-    let category_repo = FleetCategoryRepository::new(&state.db);
-    let category = entity::prelude::FleetCategory::find_by_id(fleet.category_id)
-        .one(&state.db)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Category not found".to_string()))?;
-
-    let category_guild_id = category
-        .guild_id
-        .parse::<u64>()
-        .map_err(|e| AppError::InternalError(format!("Invalid guild_id: {}", e)))?;
-
-    if category_guild_id != guild_id {
-        return Err(AppError::NotFound("Fleet not found".to_string()));
-    }
-
-    // Check if user has view permission for this category
     let user_id = user
         .discord_id
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
 
-    if !user.admin {
-        let has_access = category_repo
-            .user_can_view_category(user_id, guild_id, fleet.category_id)
-            .await?;
-
-        if !has_access {
-            return Err(AppError::NotFound("Fleet not found".to_string()));
-        }
-    }
+    let fleet_service = FleetService::new(&state.db);
+    let fleet = fleet_service
+        .get_by_id(fleet_id, guild_id, user_id, user.admin)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 
     Ok((StatusCode::OK, Json(fleet)))
 }
@@ -237,10 +223,18 @@ pub async fn get_fleet(
 /// GET /api/guilds/{guild_id}/fleets
 /// Get paginated fleets for a guild
 ///
+/// # Visibility Rules
 /// Returns fleets filtered by:
-/// - User's view permissions (categories they have access to view)
-/// - Fleets not older than 1 hour from current time
-/// - Admins bypass category filtering
+/// 1. **Category Permissions**: User must have at least one permission (view, create, or manage) for the category
+/// 2. **Time Filter**: Excludes fleets older than 1 hour from current time
+/// 3. **Hidden Fleet Visibility**: If a fleet is marked as `hidden`:
+///    - User has create OR manage permission for the category, OR
+///    - The category's reminder time has elapsed (calculated as fleet_time - ping_reminder), OR
+///    - If no reminder is configured, the fleet start time has passed
+/// 4. **Admin Override**: Admins bypass all category and visibility filtering
+///
+/// # Returns
+/// - 200 OK with PaginatedFleetsDto containing visible fleets
 pub async fn get_fleets(
     State(state): State<AppState>,
     session: Session,
@@ -270,25 +264,36 @@ pub async fn get_fleets(
 
 /// PUT /api/guilds/{guild_id}/fleets/{fleet_id}
 /// Update a fleet (requires manage permission or being the fleet commander)
+///
+/// # Authorization
+/// User must be:
+/// - An admin, OR
+/// - The fleet commander, OR
+/// - Have manage permission for the fleet's category
+///
+/// # Visibility
+/// The returned updated fleet respects the same visibility rules as GET (see get_fleet).
+/// If the fleet is updated to be hidden, the requester can still see it in the response
+/// if they have appropriate permissions.
 pub async fn update_fleet(
     State(state): State<AppState>,
     session: Session,
     Path((guild_id, fleet_id)): Path<(u64, i32)>,
     Json(dto): Json<UpdateFleetDto>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Get the fleet to check category and commander
-    let fleet_service = FleetService::new(&state.db);
-    let fleet = fleet_service
-        .get_by_id(fleet_id, guild_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
-
     let user = AuthGuard::new(&state.db, &session).require(&[]).await?;
 
     let user_id = user
         .discord_id
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
+
+    // Get the fleet to check category and commander
+    let fleet_service = FleetService::new(&state.db);
+    let fleet = fleet_service
+        .get_by_id(fleet_id, guild_id, user_id, user.admin)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 
     // Check if user is admin, has manage permission, or is the fleet commander
     let can_manage = if user.admin {
@@ -309,31 +314,42 @@ pub async fn update_fleet(
         )));
     }
 
-    let updated_fleet = fleet_service.update(fleet_id, guild_id, dto).await?;
+    let updated_fleet = fleet_service
+        .update(fleet_id, guild_id, user_id, user.admin, dto)
+        .await?;
 
     Ok((StatusCode::OK, Json(updated_fleet)))
 }
 
 /// DELETE /api/guilds/{guild_id}/fleets/{fleet_id}
 /// Delete a fleet (requires manage permission or being the fleet commander)
+///
+/// # Authorization
+/// User must be:
+/// - An admin, OR
+/// - The fleet commander, OR
+/// - Have manage permission for the fleet's category
+///
+/// # Visibility
+/// The fleet must be visible to the user (same rules as GET) before deletion is allowed.
 pub async fn delete_fleet(
     State(state): State<AppState>,
     session: Session,
     Path((guild_id, fleet_id)): Path<(u64, i32)>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Get the fleet to check category and commander
-    let fleet_service = FleetService::new(&state.db);
-    let fleet = fleet_service
-        .get_by_id(fleet_id, guild_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
-
     let user = AuthGuard::new(&state.db, &session).require(&[]).await?;
 
     let user_id = user
         .discord_id
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Invalid user discord_id: {}", e)))?;
+
+    // Get the fleet to check category and commander
+    let fleet_service = FleetService::new(&state.db);
+    let fleet = fleet_service
+        .get_by_id(fleet_id, guild_id, user_id, user.admin)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Fleet not found".to_string()))?;
 
     // Check if user is admin, has manage permission, or is the fleet commander
     let can_manage = if user.admin {

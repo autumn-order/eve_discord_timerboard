@@ -13,6 +13,8 @@ pub struct Model {
     pub fleet_time: DateTimeUtc,
     #[sea_orm(column_type = "Text", nullable)]
     pub description: Option<String>,
+    pub hidden: bool,
+    pub disable_reminder: bool,
     pub created_at: DateTimeUtc,
 }
 

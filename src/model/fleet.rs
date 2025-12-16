@@ -14,6 +14,10 @@ pub struct CreateFleetDto {
     pub fleet_time: String, // Format: "YYYY-MM-DD HH:MM" in UTC
     pub description: Option<String>,
     pub field_values: HashMap<i32, String>, // field_id -> value
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub disable_reminder: bool,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -28,6 +32,8 @@ pub struct UpdateFleetDto {
     pub fleet_time: String, // Format: "YYYY-MM-DD HH:MM" in UTC or "now"
     pub description: Option<String>,
     pub field_values: HashMap<i32, String>, // field_id -> value
+    pub hidden: bool,
+    pub disable_reminder: bool,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -48,6 +54,8 @@ pub struct FleetDto {
     pub field_values: HashMap<String, String>, // field_name -> value
     #[serde(with = "chrono::serde::ts_seconds")]
     pub created_at: DateTime<Utc>,
+    pub hidden: bool,
+    pub disable_reminder: bool,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -64,6 +72,8 @@ pub struct FleetListItemDto {
     pub commander_name: String,
     #[serde(with = "chrono::serde::ts_seconds")]
     pub fleet_time: DateTime<Utc>,
+    pub hidden: bool,
+    pub disable_reminder: bool,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]

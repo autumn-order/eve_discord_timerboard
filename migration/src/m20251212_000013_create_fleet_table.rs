@@ -22,6 +22,8 @@ impl MigrationTrait for Migration {
                     .col(string(Fleet::CommanderId))
                     .col(timestamp(Fleet::FleetTime))
                     .col(text_null(Fleet::Description))
+                    .col(boolean(Fleet::Hidden).default(false).not_null())
+                    .col(boolean(Fleet::DisableReminder).default(false).not_null())
                     .col(
                         timestamp(Fleet::CreatedAt)
                             .default(Expr::current_timestamp())
@@ -64,5 +66,7 @@ pub enum Fleet {
     CommanderId,
     FleetTime,
     Description,
+    Hidden,
+    DisableReminder,
     CreatedAt,
 }

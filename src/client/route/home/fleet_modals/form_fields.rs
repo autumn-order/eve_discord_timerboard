@@ -47,6 +47,9 @@ pub fn FleetFormFields(
     guild_members: Signal<Option<Result<Vec<DiscordGuildMemberDto>, ApiError>>>,
     is_submitting: bool,
     current_user_id: Option<u64>,
+    // Fleet visibility options
+    mut hidden: Signal<bool>,
+    mut disable_reminder: Signal<bool>,
     // Optional props for category selection (only used in create mode)
     #[props(default = None)] selected_category_id: Option<Signal<i32>>,
     #[props(default = None)] manageable_categories: Option<
@@ -393,6 +396,72 @@ pub fn FleetFormFields(
                     }
                 }
 
+                // Fleet Visibility Options
+                div {
+                    class: "space-y-2 w-full",
+                    h3 {
+                        class: "text-lg font-bold",
+                        "Visibility Options"
+                    }
+                    div {
+                        class: "space-y-3 w-full",
+
+                        // Hidden toggle
+                        div {
+                            class: "form-control w-full",
+                            label {
+                                class: "label cursor-pointer p-3 bg-base-200 rounded-box w-full",
+                                div {
+                                    class: "flex-1 select-none",
+                                    div {
+                                        class: "label-text font-semibold",
+                                        "Hidden Fleet"
+                                    }
+                                    div {
+                                        class: "label-text-alt text-sm opacity-70",
+                                        "Only visible to FCs and category managers until reminder time (or form-up if no reminder)"
+                                    }
+                                }
+                                input {
+                                    r#type: "checkbox",
+                                    class: "checkbox checkbox-primary",
+                                    checked: hidden(),
+                                    disabled: is_submitting,
+                                    onchange: move |e| hidden.set(e.checked())
+                                }
+                            }
+                        }
+
+                        // Disable reminder toggle (only show if category has a reminder configured)
+                        if details.ping_reminder.is_some() {
+                            div {
+                                class: "form-control w-full",
+                                label {
+                                    class: "label cursor-pointer p-3 bg-base-200 rounded-box w-full",
+                                    div {
+                                        class: "flex-1 select-none",
+                                        div {
+                                            class: "label-text font-semibold",
+                                            "Disable Reminder Ping"
+                                        }
+                                        div {
+                                            class: "label-text-alt text-sm opacity-70",
+                                            "Skip automated reminder ping for this fleet"
+                                        }
+                                    }
+                                    input {
+                                        r#type: "checkbox",
+                                        class: "checkbox checkbox-primary",
+                                        checked: disable_reminder(),
+                                        disabled: is_submitting,
+                                        onchange: move |e| disable_reminder.set(e.checked())
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Category Rules Section
                 if details.ping_lead_time.is_some() || details.ping_reminder.is_some() || details.max_pre_ping.is_some() {
                     div {
@@ -464,7 +533,11 @@ pub fn FleetFormFields(
                                     div {
                                         class: "flex items-center gap-3",
                                         div {
-                                            class: "badge badge-neutral badge-lg gap-2 h-auto py-2",
+                                            class: if disable_reminder() {
+                                                "badge badge-neutral badge-lg gap-2 h-auto py-2 opacity-50"
+                                            } else {
+                                                "badge badge-neutral badge-lg gap-2 h-auto py-2"
+                                            },
                                             svg {
                                                 xmlns: "http://www.w3.org/2000/svg",
                                                 class: "h-4 w-4",
@@ -481,8 +554,22 @@ pub fn FleetFormFields(
                                         }
                                         div {
                                             class: "flex-1",
-                                            div { class: "font-semibold text-sm", "Reminder Ping" }
-                                            div { class: "text-sm opacity-80", "{format_duration(&ping_reminder)} before fleet starts" }
+                                            div {
+                                                class: if disable_reminder() {
+                                                    "font-semibold text-sm line-through opacity-50"
+                                                } else {
+                                                    "font-semibold text-sm"
+                                                },
+                                                "Reminder Ping"
+                                            }
+                                            div {
+                                                class: if disable_reminder() {
+                                                    "text-sm opacity-50 line-through"
+                                                } else {
+                                                    "text-sm opacity-80"
+                                                },
+                                                "{format_duration(&ping_reminder)} before fleet starts"
+                                            }
                                         }
                                     }
                                 }

@@ -29,6 +29,11 @@ impl<'a> FleetService<'a> {
     /// # Returns
     /// - `Ok(FleetDto)`: The created fleet with enriched data
     /// - `Err(AppError)`: Validation or database error
+    ///
+    /// # Note
+    /// The returned fleet is fetched using the commander's user_id, so visibility rules apply.
+    /// However, since the commander has create permission, they will always be able to see
+    /// their own newly created fleet (even if marked as hidden).
     pub async fn create(&self, dto: CreateFleetDto) -> Result<FleetDto, AppError> {
         let repo = FleetRepository::new(self.db);
 
@@ -48,6 +53,8 @@ impl<'a> FleetService<'a> {
                 fleet_time,
                 dto.description,
                 dto.field_values,
+                dto.hidden,
+                dto.disable_reminder,
             )
             .await?;
 
@@ -63,23 +70,40 @@ impl<'a> FleetService<'a> {
             .parse::<u64>()
             .map_err(|e| AppError::InternalError(format!("Failed to parse guild_id: {}", e)))?;
 
-        self.get_by_id(fleet.id, guild_id)
+        self.get_by_id(fleet.id, guild_id, dto.commander_id, false)
             .await?
             .ok_or_else(|| AppError::NotFound("Fleet not found after creation".to_string()))
     }
 
-    /// Gets a fleet by ID with enriched data (category name, commander name with nickname, field names)
+    /// Gets a fleet by ID with enriched data (category name, commander name, field values)
     ///
     /// # Arguments
     /// - `id`: Fleet ID
-    /// - `guild_id`: Discord guild ID (for fetching commander nickname)
+    /// - `guild_id`: Discord guild ID (for fetching commander nickname and permission checks)
+    /// - `user_id`: User requesting the fleet (for permission checks)
+    /// - `is_admin`: Whether the user is an admin (bypasses all permission checks)
+    ///
+    /// # Visibility Rules
+    /// The fleet is returned only if:
+    /// 1. User has at least one permission (view, create, or manage) for the fleet's category
+    /// 2. If the fleet is hidden:
+    ///    - User has create OR manage permission for the category, OR
+    ///    - The reminder time has elapsed (or fleet start time if no reminder configured)
+    /// 3. Admins bypass all restrictions
     ///
     /// # Returns
-    /// - `Ok(Some(FleetDto))`: The fleet with enriched data
-    /// - `Ok(None)`: Fleet not found
+    /// - `Ok(Some(FleetDto))`: The fleet with enriched data (user has permission to view)
+    /// - `Ok(None)`: Fleet not found or user doesn't have permission to view it
     /// - `Err(AppError)`: Database error
-    pub async fn get_by_id(&self, id: i32, guild_id: u64) -> Result<Option<FleetDto>, AppError> {
+    pub async fn get_by_id(
+        &self,
+        id: i32,
+        guild_id: u64,
+        user_id: u64,
+        is_admin: bool,
+    ) -> Result<Option<FleetDto>, AppError> {
         let repo = FleetRepository::new(self.db);
+        let category_repo = FleetCategoryRepository::new(self.db);
 
         let result = repo.get_by_id(id).await?;
 
@@ -89,6 +113,51 @@ impl<'a> FleetService<'a> {
                 .one(self.db)
                 .await?
                 .ok_or_else(|| AppError::NotFound("Category not found".to_string()))?;
+
+            // Check if user has any permission to view this category (view, create, or manage)
+            if !is_admin {
+                let can_view = category_repo
+                    .user_can_view_category(user_id, guild_id, fleet.category_id)
+                    .await?;
+                let can_create = category_repo
+                    .user_can_create_category(user_id, guild_id, fleet.category_id)
+                    .await?;
+                let can_manage = category_repo
+                    .user_can_manage_category(user_id, guild_id, fleet.category_id)
+                    .await?;
+
+                if !can_view && !can_create && !can_manage {
+                    // User has no permission to view this category at all
+                    return Ok(None);
+                }
+
+                // If fleet is hidden, check if user can see it
+                if fleet.hidden {
+                    // Users with create or manage permission can always see hidden fleets
+                    let can_see_hidden = can_create || can_manage;
+
+                    if !can_see_hidden {
+                        // User can only see hidden fleet if reminder time has passed or fleet has started
+                        let now = chrono::Utc::now();
+                        let can_see_by_time = if let Some(reminder_seconds) = category.ping_reminder
+                        {
+                            // Check if reminder time has passed
+                            let reminder_duration =
+                                chrono::Duration::seconds(reminder_seconds as i64);
+                            let reminder_time = fleet.fleet_time - reminder_duration;
+                            now >= reminder_time
+                        } else {
+                            // No reminder configured, check if fleet has started
+                            now >= fleet.fleet_time
+                        };
+
+                        if !can_see_by_time {
+                            // User cannot see this hidden fleet yet
+                            return Ok(None);
+                        }
+                    }
+                }
+            }
 
             // Fetch commander
             let commander = entity::prelude::User::find_by_id(&fleet.commander_id)
@@ -147,6 +216,8 @@ impl<'a> FleetService<'a> {
                 description: fleet.description,
                 field_values,
                 created_at: fleet.created_at,
+                hidden: fleet.hidden,
+                disable_reminder: fleet.disable_reminder,
             }))
         } else {
             Ok(None)
@@ -155,14 +226,20 @@ impl<'a> FleetService<'a> {
 
     /// Gets paginated fleets for a guild
     ///
-    /// Filters fleets to only include:
-    /// - Fleets in categories the user can view (admins can view all)
-    /// - Fleets that are not older than 1 hour from the current time
+    /// # Visibility Rules
+    /// Returns fleets filtered by:
+    /// 1. **Category Permissions**: User must have at least one permission (view, create, or manage) for the category
+    /// 2. **Time Filter**: Excludes fleets older than 1 hour from current time
+    /// 3. **Hidden Fleet Visibility**: If a fleet is marked as `hidden`:
+    ///    - User has create OR manage permission for the category, OR
+    ///    - The category's reminder time has elapsed (calculated as fleet_time - ping_reminder), OR
+    ///    - If no reminder is configured, the fleet start time has passed
+    /// 4. **Admin Override**: Admins bypass all category permission and visibility filtering
     ///
     /// # Arguments
     /// - `guild_id`: Discord guild ID
     /// - `user_id`: Discord user ID for permission filtering
-    /// - `is_admin`: Whether the user is an admin (bypasses category filtering)
+    /// - `is_admin`: Whether the user is an admin (bypasses all filtering)
     /// - `page`: Page number (0-indexed)
     /// - `per_page`: Number of items per page
     ///
@@ -178,17 +255,34 @@ impl<'a> FleetService<'a> {
         per_page: u64,
     ) -> Result<PaginatedFleetsDto, AppError> {
         let repo = FleetRepository::new(self.db);
+        let category_repo = FleetCategoryRepository::new(self.db);
 
         // Get viewable category IDs for non-admin users
         let viewable_category_ids = if is_admin {
             None // Admins can view all categories
         } else {
-            let category_repo = FleetCategoryRepository::new(self.db);
             Some(
                 category_repo
                     .get_viewable_category_ids_by_user(user_id, guild_id)
                     .await?,
             )
+        };
+
+        // Get categories where user has create or manage permissions (can see hidden fleets)
+        let manageable_category_ids = if is_admin {
+            None // Admins can see all hidden fleets
+        } else {
+            let create_ids = category_repo
+                .get_creatable_category_ids_by_user(user_id, guild_id)
+                .await?;
+            let manage_ids = category_repo
+                .get_manageable_category_ids_by_user(user_id, guild_id)
+                .await?;
+
+            // Combine create and manage IDs
+            let mut combined: std::collections::HashSet<i32> = create_ids.into_iter().collect();
+            combined.extend(manage_ids);
+            Some(combined.into_iter().collect::<Vec<i32>>())
         };
 
         let (fleets, total) = repo
@@ -203,8 +297,46 @@ impl<'a> FleetService<'a> {
 
         // Enrich fleet data with category and commander names
         let mut fleet_list = Vec::new();
+        let now = chrono::Utc::now();
 
         for fleet in fleets {
+            // Filter hidden fleets based on permissions
+            if fleet.hidden {
+                // Check if user can see hidden fleets in this category
+                let can_see_hidden = is_admin
+                    || manageable_category_ids
+                        .as_ref()
+                        .map(|ids| ids.contains(&fleet.category_id))
+                        .unwrap_or(false);
+
+                if !can_see_hidden {
+                    // User can only see hidden fleet if reminder time has passed
+                    // Get the category to check reminder time
+                    if let Ok(Some(category)) =
+                        entity::prelude::FleetCategory::find_by_id(fleet.category_id)
+                            .one(self.db)
+                            .await
+                    {
+                        if let Some(reminder_seconds) = category.ping_reminder {
+                            let reminder_time = fleet.fleet_time
+                                - chrono::Duration::seconds(reminder_seconds as i64);
+                            if now < reminder_time {
+                                // Skip this fleet - not yet visible
+                                continue;
+                            }
+                        } else {
+                            // No reminder time configured, show at fleet start time
+                            if now < fleet.fleet_time {
+                                // Skip this fleet - not yet visible
+                                continue;
+                            }
+                        }
+                    } else {
+                        // If category not found, skip the fleet for safety
+                        continue;
+                    }
+                }
+            }
             // Fetch category
             let category = entity::prelude::FleetCategory::find_by_id(fleet.category_id)
                 .one(self.db)
@@ -245,6 +377,8 @@ impl<'a> FleetService<'a> {
                     commander_id,
                     commander_name: commander_display_name,
                     fleet_time: fleet.fleet_time,
+                    hidden: fleet.hidden,
+                    disable_reminder: fleet.disable_reminder,
                 });
             }
         }
@@ -263,7 +397,13 @@ impl<'a> FleetService<'a> {
     /// # Arguments
     /// - `id`: Fleet ID
     /// - `guild_id`: Guild ID (for authorization check)
+    /// - `user_id`: User ID performing the update (for fetching the result with visibility rules)
+    /// - `is_admin`: Whether the user is an admin (bypasses visibility rules when fetching result)
     /// - `dto`: Update data
+    ///
+    /// # Note
+    /// The returned fleet respects visibility rules (see `get_by_id` for details).
+    /// Authorization to update must be checked by the controller before calling this method.
     ///
     /// # Returns
     /// - `Ok(FleetDto)`: The updated fleet with enriched data
@@ -272,6 +412,8 @@ impl<'a> FleetService<'a> {
         &self,
         id: i32,
         guild_id: u64,
+        user_id: u64,
+        is_admin: bool,
         dto: UpdateFleetDto,
     ) -> Result<FleetDto, AppError> {
         let repo = FleetRepository::new(self.db);
@@ -328,12 +470,14 @@ impl<'a> FleetService<'a> {
                     Some(fleet_time),
                     Some(dto.description),
                     Some(dto.field_values),
+                    Some(dto.hidden),
+                    Some(dto.disable_reminder),
                 )
                 .await?;
 
                 // Fetch the updated fleet data with enriched information
                 return self
-                    .get_by_id(id, guild_id)
+                    .get_by_id(id, guild_id, user_id, is_admin)
                     .await?
                     .ok_or_else(|| AppError::NotFound("Fleet not found after update".to_string()));
             }
@@ -481,7 +625,6 @@ impl<'a> FleetService<'a> {
         let time_window_end = fleet_time + cooldown_duration;
 
         // Query for conflicting fleets in the same category
-        use sea_orm::QuerySelect;
         let mut query = entity::prelude::Fleet::find()
             .filter(entity::fleet::Column::CategoryId.eq(category_id))
             .filter(entity::fleet::Column::FleetTime.gte(time_window_start))
