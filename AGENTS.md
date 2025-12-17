@@ -640,6 +640,8 @@ Permissions Access (controllers):
 
 We use code coverage tools such as `cargo llvm-cov` to track what % of coverage we have on execution paths within our codebase, we aim to get around 95% coverage of execution paths in total.
 
+---
+
 ## Testing Structure
 
 ### Test methods
@@ -810,7 +812,289 @@ async fn fails_for_nonexistent_main_character() -> Result<(), AppError> {
 
 ---
 
-# Dioxus 
+# Naming Conventions
+
+Consistent naming conventions across the codebase ensure code is predictable, maintainable, and easy to navigate. These conventions are organized by the type of item being named.
+
+## Data Transfer Objects (DTOs)
+
+DTOs are used for data transfer between frontend and backend via API endpoints.
+
+**Format**: `{Action}{Domain}Dto`
+
+**Location**: `model/{domain}.rs`
+
+**Examples**:
+- `UserDto` - Full user data for display
+- `CreateUserDto` - Data required to create a new user
+- `UpdateTimerDto` - Data required to update a timer
+- `GetCharacterDto` - Character data returned from API
+
+**Rules**:
+- Always use `Dto` suffix
+- Use descriptive action prefixes: `Create`, `Update`, `Get`, `Delete`
+- Must derive `Serialize` and `Deserialize`
+
+## Parameter Models (Server-Only)
+
+Param models are used internally on the server between data, service, and controller layers.
+
+**Format**: `{Action}{Domain}Param` (singular - use `Param`, not `Params`)
+
+**Location**: `server/model/{domain}.rs`
+
+**Examples**:
+- `UserParam` - Full user data from database
+- `CreateUserParam` - Data required to create a user in the database
+- `GetUserParam` - Parameters for fetching a user
+- `UpdateTimerParam` - Parameters for updating a timer
+
+**Rules**:
+- Always use `Param` suffix (singular)
+- Must NOT derive `Serialize` or `Deserialize` (server-only)
+- Implement `into_dto()` method for conversion to DTOs - require additional arguments if doesn't convert 1:1
+- Implement `from_entity()` for conversion from entity models - require additional arguments if doesn't convert 1:1
+
+## Repository Structs
+
+Repository structs provide database operations for a specific domain.
+
+**Format**: `{Domain}Repository`
+
+**Location**: `server/data/{domain}.rs`
+
+**Examples**:
+- `UserRepository` - Database operations for users
+- `CharacterRepository` - Database operations for characters
+- `TimerRepository` - Database operations for timers
+
+**Rules**:
+- Always use `Repository` suffix
+- Contain a lifetime parameter for database connection: `Repository<'a>`
+- Hold a `db: &'a DatabaseConnection` field
+
+## Service Structs
+
+Service structs contain business logic between data and controller layers.
+
+**Format**: `{Domain}Service`
+
+**Location**: `server/service/{domain}.rs`
+
+**Examples**:
+- `UserService` - Business logic for user operations
+- `CharacterService` - Business logic for character operations
+- `AuthService` - Business logic for authentication
+
+**Rules**:
+- Always use `Service` suffix
+- Contain a lifetime parameter: `Service<'a>`
+- Hold a `db: &'a DatabaseConnection` field or any other fields required to be shared across service methods
+
+## Controller Functions
+
+Controller functions handle HTTP requests and responses.
+
+**Format**: `{action}_{domain}`
+
+**Location**: `server/controller/{domain}.rs`
+
+**Examples**:
+- `create_user` - POST endpoint to create user
+- `get_user` - GET endpoint to retrieve user
+- `delete_timer` - DELETE endpoint to remove timer
+- `update_character` - PUT/PATCH endpoint to update character
+
+**Rules**:
+- Prefix with HTTP action verb: `get_`, `create_`, `update_`, `delete_`, `list_`
+- Must be `pub async fn`
+- Use `#[utoipa::path]` macro for Swagger documentation
+- Return `Result<impl IntoResponse, AppError>`
+
+## File Naming
+
+All files follow consistent naming patterns based on their domain.
+
+**Format**: `{domain}.rs` (lowercase, snake_case)
+
+**Examples**:
+- `user.rs` - User domain
+- `character.rs` - Character domain
+- `eve_corporation.rs` - EVE Corporation domain (multi-word)
+- `auth_guard.rs` - Authentication guard (multi-word)
+
+**Rules**:
+- One domain per file
+- Use `snake_case` for multi-word domains
+- Keep names concise but descriptive
+
+## Constants
+
+Constants use screaming snake case and are typically defined at the module level.
+
+**Format**: `SCREAMING_SNAKE_CASE`
+
+**Examples**:
+- `USER_TAG` - Tag for Swagger UI grouping
+- `MAX_RETRIES` - Maximum retry attempts
+- `DEFAULT_TIMEOUT` - Default timeout duration
+- `API_BASE_URL` - Base URL for API requests
+
+**Rules**:
+- Always use `SCREAMING_SNAKE_CASE`
+- Declare with `static` or `const`
+- Use descriptive names that indicate purpose
+
+## Enums
+
+Enums represent a type with multiple variants.
+
+**Format**: `{Description}` (PascalCase)
+
+**Examples**:
+- `ConfigError` - Configuration error types
+- `Permission` - Permission levels
+- `WorkerJob` - Types of worker jobs
+- `Route` - Application routes (Dioxus routing)
+
+**Rules**:
+- Use `PascalCase` for enum names
+- Variants also use `PascalCase`: `LoggedIn`, `Admin`, `MissingEnvVar`
+- Error enums should have `Error` suffix
+- Derive appropriate traits: `Debug`, `Clone`, `PartialEq` as needed
+
+## Error Types
+
+Error types are enums that represent different error conditions.
+
+**Format**: `{Domain}Error` or `AppError`
+
+**Location**: `server/error/{domain}.rs` or `server/error/mod.rs`
+
+**Examples**:
+- `AppError` - Top-level application error enum
+- `ConfigError` - Configuration-specific errors
+- `AuthError` - Authentication-specific errors
+- `DatabaseError` - Database operation errors
+
+**Rules**:
+- Enum names always use `Error` suffix (e.g., `AppError`, `ConfigError`)
+- Variants do NOT use `Error` suffix to avoid clippy `enum_variant_names` warning
+- Must derive `Error` and `Debug` from `thiserror`
+- Use `#[error("...")]` attributes for error messages
+- Variants use `PascalCase`: `NotFound`, `InvalidInput`, `Unauthorized`, `MissingEnvVar`
+
+**Example**:
+```rust
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Resource not found")]
+    NotFound,  // ✅ Good - no Error suffix
+    
+    #[error("Database error: {0}")]
+    Database(#[from] sea_orm::DbErr),  // ✅ Good
+    
+    #[error("Configuration error: {0}")]
+    Config(#[from] ConfigError),  // ✅ Good - wraps another error type
+}
+
+// ❌ Bad - clippy will warn about redundant suffix
+pub enum AppError {
+    NotFoundError,  // Redundant - already in AppError enum
+    DatabaseError,  // Redundant
+}
+```
+
+## Test Modules
+
+Test modules follow a nested structure based on the methods being tested.
+
+**Format**: 
+- Root module: `mod test`
+- Method modules: `mod {method_name}`
+- Test functions: `{concise_description_of_test}` (snake_case)
+
+**Location**: Inline in same file or `test/{file}/{method}.rs`
+
+**Examples**:
+```rust
+#[cfg(test)]
+mod test {
+    use super::*;
+    
+    mod create_user {
+        use super::*;
+        
+        #[tokio::test]
+        async fn creates_user_successfully() -> Result<(), AppError> {
+            // Test implementation
+        }
+        
+        #[tokio::test]
+        async fn fails_for_duplicate_email() -> Result<(), AppError> {
+            // Test implementation
+        }
+    }
+    
+    mod get_user {
+        use super::*;
+        
+        #[tokio::test]
+        async fn returns_existing_user() -> Result<(), AppError> {
+            // Test implementation
+        }
+    }
+}
+```
+
+**Rules**:
+- Root test module always named `mod test`
+- Each method gets its own nested module
+- Test function names describe what they test in `snake_case`
+- Use descriptive names: `creates_x`, `fails_for_y`, `returns_z`, `updates_x_when_y`
+
+## Frontend Components
+
+Dioxus components follow specific naming conventions.
+
+**Format**: `{ComponentName}` (PascalCase) for component functions
+
+**Location**: `client/component/{name}.rs` or `client/route/{page}/component/{name}.rs`
+
+**Examples**:
+- `NavBar` - Navigation bar component
+- `UserCard` - Card displaying user information
+- `TimerList` - List of timers component
+- `LoginForm` - Login form component
+
+**Rules**:
+- Component functions use `PascalCase` or contain underscore
+- Must have `#[component]` macro
+- File names use `snake_case`: `nav_bar.rs`, `user_card.rs`
+- Props use `snake_case`: `user_id`, `is_active`, `on_click`
+
+## Variables and Fields
+
+General variable naming follows Rust conventions.
+
+**Format**: `snake_case`
+
+**Examples**:
+- `user_id` - User identifier
+- `character_name` - Character name
+- `main_character_id` - Main character identifier
+- `is_admin` - Boolean flag
+- `created_at` - Timestamp field
+
+**Rules**:
+- Always use `snake_case`
+- Boolean fields prefixed with `is_`, `has_`, `can_`, `should_`
+- Avoid abbreviations unless widely understood (`id`, `url`, `api`)
+- Be descriptive but concise
+
+---
+
+# Dioxus
 
 You are an expert [0.7 Dioxus](https://dioxuslabs.com/learn/0.7) assistant. Dioxus 0.7 changes every api in dioxus. Only use this up to date documentation. `cx`, `Scope`, and `use_state` are gone
 
