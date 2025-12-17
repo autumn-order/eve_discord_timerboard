@@ -609,11 +609,114 @@ pub struct ScheduledWorkerJob {
 
 # Testing
 
+## How we are testing
+
+**Unit Testing**
+- Unit testing is anything that involves a single method under test with minimal dependencies such as a database repository method or a helper method
+- `DatabaseConnection` - we use in-memory `sqlite` with only the required tables (foreign key-related) for test purposes, this allows us to unit test database repository methods instead of integration testing them
+- `Session` - we use an in-memory `sqite` driver for `tower-sessions`, allowing us to also unit test anything session-related
+
+**Integration Testing**
+- Integration testing is more complex logic that has dependencies on multiple underlying methods or external providers like redis or mockito for mock HTTP servers. We would integration any services, controllers, worker handlers, schedulers, etc
+- `Mockito` - allows us to create mock HTTP servers, due to involvement of mock HTTP servers we would make any test that relies on this an integration test
+- `Redis` - we would need to use a development redis instance making anything using redis an integration test
+
+## What we are testing
+
+Execution paths (all functions):
+- Ok return types (Some, None, Vec empty, Vec single, Vec multiple, etc)
+- Error variant return types (DbErr, SessionErr, any `?` error propagation so we know how it is triggered)
+- Conditional branches (match, if, if else, if let Some())
+- We want to ensure all execution paths return the result as expected
+
+Database behavior (repository/service):
+- What happens if we violate a foreign key constraint, what error would we expect (Sqlite does enforce foreign keys)
+- What happens if we violate a unique index, are we properly enforcing this? (Sqlite doesn't generally enforce this so we should add additional code to the method to handle it ourselves)
+- We want to ensure that the method under test creates the exact results we expect
+
+Permissions Access (controllers):
+- We should get a forbidden response if we try to request this resource with improper permisions
+- We should get a success response regardless of permissions if we are admin
+
+We use code coverage tools such as `cargo llvm-cov` to track what % of coverage we have on execution paths within our codebase, we aim to get around 95% coverage of execution paths in total.
+
 ## Testing Structure
 
-We favor inline tests first and foremost, keeping the test module within the same file of the methods under test. But, when the file begins to reach `500` lines in length, then we'll separate the test modules into separate folders.
+### Test methods
 
-### Inline Tests
+Test method structure is:
+- Setup: create the starting state before we execute the method under test
+- Execution: run the method under test
+- Assertions: run assertions such as we got the expected values, the values were properly inserted into database, and expected requests were made to the http server
+
+Integration test example:
+
+```rust
+/// Tests updating a new character without faction.
+///
+/// Verifies that the character service successfully fetches character data from ESI
+/// and creates a new character record in the database when the character has no
+/// faction affiliation.
+///
+/// Expected: Ok with character record created
+#[tokio::test]
+async fn updates_new_character_without_faction() -> Result<(), TestError> {
+    // Test setup using a builder pattern
+    let character_id = 95_000_001;
+    let corporation_id = 98_000_001;
+
+    let test = TestBuilder::new()
+        // Migrate required tables for the test on an in-memory sqlite instance
+        // - We only migrate the tables we actually need for the current test
+        .with_table(entity::prelude::EveFaction)
+        .with_table(entity::prelude::EveAlliance)
+        .with_table(entity::prelude::EveCorporation)
+        .with_table(entity::prelude::EveCharacter)
+        // Create any required mockito mock HTTP endpoints that will be requested
+        // - Each endpoint will expect 1 request each
+        .with_corporation_endpoint(corporation_id, factory::mock_corporation(None, None), 1)
+        .with_character_endpoint(
+            character_id,
+            factory::mock_character(corporation_id, None, None),
+            1,
+        )
+        .build()
+        .await?;
+
+    // Execute the method under test
+    let character_service = CharacterService::new(&test.db, &test.esi_client);
+    let result = character_service.update(character_id).await;
+
+    // Go through all assertions to ensure we have the result & state we expected
+    assert!(result.is_ok());
+    let character = result.unwrap();
+    assert_eq!(character.character_id, character_id);
+    assert!(character.faction_id.is_none());
+
+    // Verify character exists in database
+    let db_character = entity::prelude::EveCharacter::find()
+        .one(&test.db)
+        .await?
+        .unwrap();
+    assert_eq!(db_character.character_id, character_id);
+    assert!(db_character.faction_id.is_none());
+
+    // Verify corporation was created in database
+    let corporation = entity::prelude::EveCorporation::find()
+        .one(&test.db)
+        .await?;
+    assert!(corporation.is_some());
+
+    // Assert expected HTTP requests were made to the mock server
+    test.assert_mocks();
+
+    Ok(())
+}
+```
+
+### Inline Tests (Unit Tests)
+
+We use inline tests for unit testing, keeping the test module in the same file of the methods under test. But, we do swap to a folder & file-based unit test structure if the file we are testing begins to near `500 lines` in length.
 
 - Use `mod test` as the root
 - For each method, add a new mod, e.g. `mod user`
@@ -648,9 +751,9 @@ mod test {
 }
 ```
 
-### Folder Tests
+### Folder Tests (Integration Tests)
 
-We use folder & file-based test structure if the file containing the methods we are testing starts to surpass `500 lines` in length.
+We use folder & file-based test structure for integration tests and for unit tests if the file we are doing inline unit tests in begins to near reaching over `500 lines`.
 
 - We do a test folder at the root of where we are testing files (`test/` folder in same folder as `user.rs`)
 - Then, the test folder contains a folder that represents each file we are testing (`test/user/` for `user.rs`)
