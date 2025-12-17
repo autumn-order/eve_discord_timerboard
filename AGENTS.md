@@ -607,6 +607,106 @@ pub struct ScheduledWorkerJob {
 
 ---
 
+# Testing
+
+## Testing Structure
+
+We favor inline tests first and foremost, keeping the test module within the same file of the methods under test. But, when the file begins to reach `500` lines in length, then we'll separate the test modules into separate folders.
+
+### Inline Tests
+
+- Use `mod test` as the root
+- For each method, add a new mod, e.g. `mod user`
+- Favor usage of `use super::*;` to reduce verbosity of imports
+- Use the `Result<(), Error>` return pattern so we can propagate errors with `?` to be concise
+
+Example:
+
+```rust
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    mod get_user {
+        use super::*;
+        
+        /// Tests creating a new user.
+        ///
+        /// Verifies that the user repository successfully creates a new user record
+        /// with the specified main character ID.
+        ///
+        /// Expected: Ok
+        #[tokio::test]
+        async fn creates_user() -> Result<(), AppError> {
+            // Test logic goes here
+            todo!()
+    
+            Ok(())
+        }
+
+    }
+}
+```
+
+### Folder Tests
+
+We use folder & file-based test structure if the file containing the methods we are testing starts to surpass `500 lines` in length.
+
+- We do a test folder at the root of where we are testing files (`test/` folder in same folder as `user.rs`)
+- Then, the test folder contains a folder that represents each file we are testing (`test/user/` for `user.rs`)
+- The folder for the `user.rs` tests then contains a file for each method under test (`test/user/get_user.rs` for get_user method in `user.rs`)
+- Each test module will import `super::*;` to reduce repetition in imports
+
+Example folder structure:
+
+```
+data/
+├── test/
+│   ├── mod.rs              # Imports `super::*;`
+│   └── user/               # Contains tests for all `user.rs` methods
+│       ├── mod.rs          # Imports `super::*;`
+│       └── get_user.rs     # Has tests solely for `get_user` method
+└── user.rs                 # Contains `get_user` method
+```
+
+Example method test file:
+
+```rust
+use super::*;
+
+/// Tests error handling for nonexistent main character.
+///
+/// Verifies that the user repository returns an error when attempting to create
+/// a user with a main character ID that does not exist in the database.
+///
+/// Expected: Err
+#[tokio::test]
+async fn fails_for_nonexistent_main_character() -> Result<(), AppError> {
+    // Test logic goes here
+    todo!()
+
+    Ok(())
+}
+
+// Additional test methods...
+```
+
+---
+
+# Logging
+
+- We import `dioxus_logger::tracing` for logging, then using `tracing::info!` macros to log information
+- It is important we avoid logging noise, only utilizing 
+
+- `error!` logging belongs either top level or if we get an error that causes us to have to skip something, such as skipping update for a resource due to a not found in a batch update method, but doesn't cause an error to propagate upwards. 
+- When errors are fully propagated upwards, we would log them in the top level such as the worker job handler or `into_response` method we impl on the `AppError` enum for errors within controllers. That way we only error log in a single place for the propagated error.
+- `warn!` logging is used when we have unexpected, but non-fatal state which is recoverable but may result in degraded functionality. We should `warn!` log for it to indicate issues may arise but there aren't any major, application-breaking problems. We do so for example where we can safely set `None` for a value as a temporary solution but may cause data not to display as expected.
+- `info!` we use for significant events that effect application-wide state, a routine API request we may `debug!` log but we wouldn't `info!` log it. Now, if we for example add a new admin, we'd then `info!` log it. Or if we refreshed a cache the entire application relies on that we update hourly, we would `info!` log that as well.
+- `debug!` is used to help us examine the behavior of the application such as we run a periodic cron task or make an API fetch: "Ran periodic update task for user ID {} at {}", "skipping update task scheduled for {}, already up to date", "successfully fetched x from {endpoint} after x seconds".
+- `trace!` would be used when we enter/exit a function such as "getting user from database" at the start of a repo method & "successfully found user in database" at the end of a repo method before returning.
+
+---
+
 # Dioxus 
 
 You are an expert [0.7 Dioxus](https://dioxuslabs.com/learn/0.7) assistant. Dioxus 0.7 changes every api in dioxus. Only use this up to date documentation. `cx`, `Scope`, and `use_state` are gone
