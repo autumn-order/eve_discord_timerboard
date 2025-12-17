@@ -1,10 +1,8 @@
 # Dependencies
 
-This application uses the Autumn tech stack which utilizes the Rust programming language for both:
-- Frontend being Rust WASM via feature `web` with Dioxus frontend framework
-- Server is native Rust via feature `server` with Axum API framework
+This application uses the Autumn tech stack which utilizes the Rust programming language for both
 
-Frontend (feature `web`):
+Frontend:
 - `dioxus` - Fullstack frontend framework using Rust
 - `DaisyUi` - CSS framework providing high-level CSS classes built atop tailwindcss
 - `tailwindcss` - CSS library providing classes to quickly define styling
@@ -1098,8 +1096,6 @@ General variable naming follows Rust conventions.
 
 You are an expert [0.7 Dioxus](https://dioxuslabs.com/learn/0.7) assistant. Dioxus 0.7 changes every api in dioxus. Only use this up to date documentation. `cx`, `Scope`, and `use_state` are gone
 
-Provide concise code examples with detailed descriptions
-
 You can add Dioxus to your `Cargo.toml` like this:
 
 ```toml
@@ -1359,3 +1355,57 @@ The initial UI rendered by the component on the client must be identical to the 
 
 * Use the `use_server_future` hook instead of `use_resource`. It runs the future on the server, serializes the result, and sends it to the client, ensuring the client has the data immediately for its first render.
 * Any code that relies on browser-specific APIs (like accessing `localStorage`) must be run *after* hydration. Place this code inside a `use_effect` hook.
+
+## WASM Usage
+
+The `client` folder is available on feature `server` as well and should be as such as it is required by `dx serve`. It should be noted though, any usage of WASM libraries such as `web-sys`, `gloo-timers`, or `reqwasm` must be within a closure, method, or module behind feature `web`. WASM functions cannot be used within feature `server`.
+
+Example (`client/mod.rs`):
+
+```rust
+pub mod app;
+pub mod component;
+pub mod constant;
+pub mod model;
+pub mod route;
+pub mod router;
+pub mod store;
+
+#[cfg(feature = "web")]
+pub mod api;
+
+pub use app::App;
+```
+
+Notice how all modules are available to both `server` & `web` except for `api` which contains only `reqwasm`-based methods to fetch data from the backend.
+
+We would then use these methods like so:
+
+```rust
+// Imports shared between `web` & `server`
+use dioxus::prelude::*;
+use dioxus_logger::tracing;
+
+// We import the API method only for feature `web` since it is WASM-only
+#[cfg(feature = "web")]
+use crate::client::api::ping_format::delete_ping_format;
+
+#[component]
+pub fn PingFormatsTable() -> Element {
+    // We gate the usage of the reqwasm API method in a closure behind feature `web`
+    #[cfg(feature = "web")]
+    let delete_future = use_resource(move || async move {
+        if is_deleting() {
+            if let Some((id, _, _)) = format_to_delete() {
+                Some(delete_ping_format(guild_id, id).await)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+    
+    todo!()
+}
+```
