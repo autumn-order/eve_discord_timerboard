@@ -5,7 +5,10 @@ use serenity::http::Http;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::server::{error::AppError, service::fleet_notification::FleetNotificationService};
+use crate::server::{
+    error::AppError, model::fleet::FleetParam,
+    service::fleet_notification::FleetNotificationService,
+};
 
 /// Starts the fleet notification scheduler
 ///
@@ -152,8 +155,10 @@ async fn process_reminders(
                             .map(|fv| (fv.field_id, fv.value))
                             .collect();
 
+                        let fleet_param = FleetParam::from_entity(fleet.clone());
+
                         if let Err(e) = notification_service
-                            .post_fleet_reminder(&fleet, &field_values_map)
+                            .post_fleet_reminder(&fleet_param, &field_values_map)
                             .await
                         {
                             tracing::error!(
@@ -217,8 +222,10 @@ async fn process_formups(
                     .map(|fv| (fv.field_id, fv.value))
                     .collect();
 
+                let fleet_param = FleetParam::from_entity(fleet.clone());
+
                 if let Err(e) = notification_service
-                    .post_fleet_formup(&fleet, &field_values_map)
+                    .post_fleet_formup(&fleet_param, &field_values_map)
                     .await
                 {
                     tracing::error!("Failed to send form-up for fleet {}: {}", fleet.id, e);

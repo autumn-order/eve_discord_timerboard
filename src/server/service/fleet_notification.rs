@@ -15,7 +15,10 @@ use crate::server::{
         fleet_message::FleetMessageRepository,
     },
     error::AppError,
-    model::fleet_message::{CreateFleetMessageParam, FleetMessageParam},
+    model::{
+        fleet::FleetParam,
+        fleet_message::{CreateFleetMessageParam, FleetMessageParam},
+    },
 };
 
 pub struct FleetNotificationService<'a> {
@@ -38,7 +41,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `field_values`: Map of field_id -> value for ping format fields
     pub async fn post_fleet_creation(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         field_values: &std::collections::HashMap<i32, String>,
     ) -> Result<(), AppError> {
         self.post_fleet_notification(
@@ -61,7 +64,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `field_values`: Map of field_id -> value for ping format fields
     pub async fn post_fleet_reminder(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         field_values: &std::collections::HashMap<i32, String>,
     ) -> Result<(), AppError> {
         // Skip if reminders are disabled for this fleet
@@ -94,7 +97,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `field_values`: Map of field_id -> value for ping format fields
     pub async fn post_fleet_formup(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         field_values: &std::collections::HashMap<i32, String>,
     ) -> Result<(), AppError> {
         let message_repo = FleetMessageRepository::new(self.db);
@@ -118,7 +121,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `field_values`: Map of field_id -> value for ping format fields
     pub async fn update_fleet_messages(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         field_values: &std::collections::HashMap<i32, String>,
     ) -> Result<(), AppError> {
         let message_repo = FleetMessageRepository::new(self.db);
@@ -212,10 +215,7 @@ impl<'a> FleetNotificationService<'a> {
     ///
     /// # Arguments
     /// - `fleet`: Fleet entity model being cancelled
-    pub async fn cancel_fleet_messages(
-        &self,
-        fleet: &entity::fleet::Model,
-    ) -> Result<(), AppError> {
+    pub async fn cancel_fleet_messages(&self, fleet: &FleetParam) -> Result<(), AppError> {
         let message_repo = FleetMessageRepository::new(self.db);
         let category_repo = FleetCategoryRepository::new(self.db);
 
@@ -556,7 +556,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `reference_messages`: Optional existing messages to reply to
     async fn post_fleet_notification(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         field_values: &std::collections::HashMap<i32, String>,
         _title: Option<&str>, // Deprecated - title is now built from category name and message type
         color: u32,
@@ -701,7 +701,7 @@ impl<'a> FleetNotificationService<'a> {
     /// Fetches the commander's Discord name (nickname in guild or username fallback)
     async fn get_commander_name(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         guild_id: u64,
     ) -> Result<String, AppError> {
         let commander_id = fleet
@@ -733,7 +733,7 @@ impl<'a> FleetNotificationService<'a> {
     /// Builds a Discord embed for a fleet
     async fn build_fleet_embed(
         &self,
-        fleet: &entity::fleet::Model,
+        fleet: &FleetParam,
         fields: &[entity::ping_format_field::Model],
         field_values: &std::collections::HashMap<i32, String>,
         color: u32,

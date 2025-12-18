@@ -1,3 +1,11 @@
+//! Fleet data repository for database operations.
+//!
+//! This module provides the `FleetRepository` for managing fleet records in the database.
+//! Fleets represent scheduled operations with commanders, categories, custom fields, and
+//! notification settings. The repository handles creation, updates, queries, and deletion
+//! with proper conversion between entity models and parameter models at the infrastructure
+//! boundary.
+
 use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
@@ -5,26 +13,41 @@ use sea_orm::{
 };
 use std::collections::HashMap;
 
-use crate::server::model::fleet::{CreateFleetParams, UpdateFleetParams};
+use crate::server::model::fleet::{CreateFleetParams, FleetParam, UpdateFleetParams};
 
+/// Repository providing database operations for fleet management.
+///
+/// This struct holds a reference to the database connection and provides methods
+/// for creating, reading, updating, and deleting fleet records.
 pub struct FleetRepository<'a> {
     db: &'a DatabaseConnection,
 }
 
 impl<'a> FleetRepository<'a> {
+    /// Creates a new FleetRepository instance.
+    ///
+    /// # Arguments
+    /// - `db`: Reference to the database connection
+    ///
+    /// # Returns
+    /// - `FleetRepository`: New repository instance
     pub fn new(db: &'a DatabaseConnection) -> Self {
         Self { db }
     }
 
-    /// Creates a new fleet with field values
+    /// Creates a new fleet with field values.
+    ///
+    /// Inserts a new fleet record into the database and creates associated field value
+    /// records for custom ping format fields. The fleet is created with a timestamp and
+    /// all field values are inserted within the same operation sequence.
     ///
     /// # Arguments
-    /// - `params`: CreateFleetParams containing all fleet creation data
+    /// - `params`: Create parameters containing all fleet creation data including field values
     ///
     /// # Returns
-    /// - `Ok(Model)`: The created fleet
-    /// - `Err(DbErr)`: Database error
-    pub async fn create(&self, params: CreateFleetParams) -> Result<entity::fleet::Model, DbErr> {
+    /// - `Ok(FleetParam)`: The created fleet with generated ID
+    /// - `Err(DbErr)`: Database error during insert operation (including foreign key violations)
+    pub async fn create(&self, params: CreateFleetParams) -> Result<FleetParam, DbErr> {
         // Create the fleet
         let fleet = entity::fleet::ActiveModel {
             category_id: ActiveValue::Set(params.category_id),
@@ -51,22 +74,29 @@ impl<'a> FleetRepository<'a> {
             .await?;
         }
 
-        Ok(fleet)
+        Ok(FleetParam::from_entity(fleet))
     }
 
-    /// Gets a fleet by ID with its field values
+    /// Gets a fleet by ID with its field values.
+    ///
+    /// Retrieves a fleet and all associated custom field values. Returns both the fleet
+    /// data and a map of field_id to field value for easy lookup. Used when displaying
+    /// or editing fleet details.
+    ///
+    /// # Arguments
+    /// - `id`: ID of the fleet to retrieve
     ///
     /// # Returns
-    /// - `Ok(Some((fleet, field_values)))`: Fleet and map of field_id -> value
-    /// - `Ok(None)`: Fleet not found
-    /// - `Err(DbErr)`: Database error
+    /// - `Ok(Some((fleet, field_values)))`: Fleet param and map of field_id to value
+    /// - `Ok(None)`: No fleet found with that ID
+    /// - `Err(DbErr)`: Database error during query
     pub async fn get_by_id(
         &self,
         id: i32,
-    ) -> Result<Option<(entity::fleet::Model, HashMap<i32, String>)>, DbErr> {
-        let fleet = entity::prelude::Fleet::find_by_id(id).one(self.db).await?;
+    ) -> Result<Option<(FleetParam, HashMap<i32, String>)>, DbErr> {
+        let entity = entity::prelude::Fleet::find_by_id(id).one(self.db).await?;
 
-        if let Some(fleet) = fleet {
+        if let Some(entity) = entity {
             let field_values = entity::prelude::FleetFieldValue::find()
                 .filter(entity::fleet_field_value::Column::FleetId.eq(id))
                 .all(self.db)
@@ -75,34 +105,38 @@ impl<'a> FleetRepository<'a> {
                 .map(|fv| (fv.field_id, fv.value))
                 .collect();
 
-            Ok(Some((fleet, field_values)))
+            Ok(Some((FleetParam::from_entity(entity), field_values)))
         } else {
             Ok(None)
         }
     }
 
-    /// Gets paginated fleets for a guild, ordered by fleet_time (upcoming first)
+    /// Gets paginated fleets for a guild, ordered by fleet_time (upcoming first).
     ///
     /// Filters fleets to only include:
     /// - Fleets in categories the user can view (or all if category_ids is None for admins)
     /// - Fleets that are not older than 1 hour from the current time
     ///
+    /// The cutoff time prevents showing very old completed fleets while allowing recently
+    /// started fleets to remain visible briefly. Results are ordered by fleet_time in
+    /// ascending order so upcoming fleets appear first.
+    ///
     /// # Arguments
-    /// - `guild_id`: Discord guild ID (u64)
-    /// - `page`: Page number (0-indexed)
-    /// - `per_page`: Number of items per page
+    /// - `guild_id`: Discord guild ID as u64
+    /// - `page`: Zero-indexed page number
+    /// - `per_page`: Number of fleets to return per page
     /// - `viewable_category_ids`: Optional list of category IDs the user can view (None means all categories - admin bypass)
     ///
     /// # Returns
-    /// - `Ok((fleets, total))`: Vector of fleets and total count
-    /// - `Err(DbErr)`: Database error
+    /// - `Ok((fleets, total))`: Vector of fleets for the page and total count
+    /// - `Err(DbErr)`: Database error during pagination query
     pub async fn get_paginated_by_guild(
         &self,
         guild_id: u64,
         page: u64,
         per_page: u64,
         viewable_category_ids: Option<Vec<i32>>,
-    ) -> Result<(Vec<entity::fleet::Model>, u64), DbErr> {
+    ) -> Result<(Vec<FleetParam>, u64), DbErr> {
         use entity::fleet_category;
         use sea_orm::JoinType;
 
@@ -131,26 +165,23 @@ impl<'a> FleetRepository<'a> {
 
         let paginator = query.paginate(self.db, per_page);
         let total = paginator.num_items().await?;
-        let fleets = paginator.fetch_page(page).await?;
+        let entities = paginator.fetch_page(page).await?;
+        let fleets = entities.into_iter().map(FleetParam::from_entity).collect();
 
         Ok((fleets, total))
     }
 
-    /// Gets paginated fleets for a specific category
+    /// Deletes a fleet by ID.
+    ///
+    /// Deletes the fleet with the specified ID. Associated field values and fleet messages
+    /// are automatically deleted due to CASCADE foreign key constraints.
     ///
     /// # Arguments
-    /// - `category_id`: Fleet category ID
-    /// - `page`: Page number (0-indexed)
-    /// - `per_page`: Number of items per page
-    ///
-    /// Deletes a fleet by ID
-    ///
-    /// # Arguments
-    /// - `id`: Fleet ID
+    /// - `id`: ID of the fleet to delete
     ///
     /// # Returns
-    /// - `Ok(())`: Fleet deleted successfully
-    /// - `Err(DbErr)`: Database error
+    /// - `Ok(())`: Fleet deleted successfully (or didn't exist)
+    /// - `Err(DbErr)`: Database error during delete operation
     pub async fn delete(&self, id: i32) -> Result<(), DbErr> {
         entity::prelude::Fleet::delete_by_id(id)
             .exec(self.db)
@@ -158,15 +189,20 @@ impl<'a> FleetRepository<'a> {
         Ok(())
     }
 
-    /// Updates a fleet
+    /// Updates a fleet.
+    ///
+    /// Updates an existing fleet's properties. Only provided fields in the params are updated,
+    /// allowing partial updates. If field_values are provided, all existing field values are
+    /// deleted and replaced with the new values.
     ///
     /// # Arguments
-    /// - `params`: UpdateFleetParams containing update data
+    /// - `params`: Update parameters containing fleet ID and optional new values
     ///
     /// # Returns
-    /// - `Ok(Model)`: The updated fleet
-    /// - `Err(DbErr)`: Database error
-    pub async fn update(&self, params: UpdateFleetParams) -> Result<entity::fleet::Model, DbErr> {
+    /// - `Ok(FleetParam)`: The updated fleet with new values
+    /// - `Err(DbErr::RecordNotFound)`: No fleet exists with the specified ID
+    /// - `Err(DbErr)`: Other database error during update operation
+    pub async fn update(&self, params: UpdateFleetParams) -> Result<FleetParam, DbErr> {
         let id = params.id;
         let fleet = entity::prelude::Fleet::find_by_id(id)
             .one(self.db)
@@ -216,6 +252,6 @@ impl<'a> FleetRepository<'a> {
             }
         }
 
-        Ok(updated_fleet)
+        Ok(FleetParam::from_entity(updated_fleet))
     }
 }
