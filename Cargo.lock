@@ -6772,6 +6772,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-cron-scheduler",
+ "tower-http",
  "tower-sessions",
  "tower-sessions-sqlx-store",
  "url",

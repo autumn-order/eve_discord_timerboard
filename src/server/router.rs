@@ -1,9 +1,12 @@
 use axum::{
+    http::{header, HeaderValue, Method},
     routing::{get, put},
     Router,
 };
+use tower_http::cors::CorsLayer;
 
 use crate::server::{
+    config::Config,
     controller::{
         admin::{add_admin, add_bot, get_all_admins, get_all_users, remove_admin},
         auth::{callback, get_user, login, logout},
@@ -24,11 +27,48 @@ use crate::server::{
         },
         user::{get_user_guilds, get_user_manageable_categories},
     },
+    error::AppError,
     state::AppState,
 };
 
-pub fn router() -> Router<AppState> {
-    Router::new().nest("/api", api_router())
+/// Creates the main router with CORS configuration.
+///
+/// Configures CORS based on the allowed origins from the application config.
+/// CORS is applied to all API routes with credentials support enabled for
+/// session-based authentication.
+///
+/// # Arguments
+/// - `config` - Application configuration containing CORS origins
+///
+/// # Returns
+/// - `Ok(Router<AppState>)` - Configured router with CORS layer applied
+/// - `Err(AppError::InternalError)` - If app_url fails to parse
+pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
+    // Parse app_url into HeaderValue for CORS configuration
+    let origin = config
+        .app_url
+        .parse::<HeaderValue>()
+        .map_err(|e| AppError::InternalError(format!("Failed to parse app_url: {}", e)))?;
+
+    // Configure CORS layer with production-ready settings
+    let cors = CorsLayer::new()
+        .allow_origin(origin)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::COOKIE,
+        ])
+        .allow_credentials(true); // Required for session cookies
+
+    Ok(Router::new().nest("/api", api_router()).layer(cors))
 }
 
 fn api_router() -> Router<AppState> {
