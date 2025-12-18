@@ -63,7 +63,7 @@ fn main() {
         });
 
         let mut router = dioxus::server::router(App);
-        let server_routes = server::router::router()
+        let server_routes = server::router::router(&config)?
             .with_state(AppState::new(
                 db,
                 http_client,

@@ -1,3 +1,10 @@
+//! User Discord guild role service for managing user-role associations.
+//!
+//! This module provides the `UserDiscordGuildRoleService` for synchronizing and managing
+//! the relationships between users and their Discord roles across guilds. It orchestrates
+//! between multiple repositories to ensure role memberships are accurately reflected in
+//! the database based on Discord's API data.
+
 use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
 use serenity::all::Member;
@@ -10,28 +17,42 @@ use crate::server::{
     error::AppError,
 };
 
+/// Service for managing user Discord guild role associations.
+///
+/// Provides methods for synchronizing user role memberships with Discord's state,
+/// handling both individual user syncs during login and bulk syncs during bot startup.
+/// Acts as the orchestration layer between Discord API data and database repositories.
 pub struct UserDiscordGuildRoleService<'a> {
+    /// Database connection for repository operations.
     db: &'a DatabaseConnection,
 }
 
 impl<'a> UserDiscordGuildRoleService<'a> {
+    /// Creates a new UserDiscordGuildRoleService instance.
+    ///
+    /// # Arguments
+    /// - `db` - Reference to the database connection
+    ///
+    /// # Returns
+    /// - `UserDiscordGuildRoleService` - New service instance
     pub fn new(db: &'a DatabaseConnection) -> Self {
         Self { db }
     }
 
-    /// Syncs a user's role memberships for a specific guild
+    /// Syncs a user's role memberships for a specific guild.
     ///
     /// Updates the database to reflect which roles the user currently has in the guild.
     /// Only creates relationships for roles that exist in the database (tracked by the bot).
-    /// Replaces all existing role memberships for the user with the current set.
+    /// Replaces all existing role memberships for the user in this guild with the current set.
+    /// Used during OAuth login to ensure role data is current.
     ///
     /// # Arguments
-    /// - `user_id`: Discord user ID (u64)
-    /// - `member`: Discord Member object containing the user's current roles
+    /// - `user_id` - Discord user ID
+    /// - `member` - Discord Member object containing the user's current roles and guild
     ///
     /// # Returns
-    /// - `Ok(())`: Sync completed successfully
-    /// - `Err(AppError)`: Database error during role query or sync
+    /// - `Ok(())` - Sync completed successfully
+    /// - `Err(AppError::Database)` - Database error during role query or sync
     pub async fn sync_user_roles(&self, user_id: u64, member: &Member) -> Result<(), AppError> {
         let role_repo = DiscordGuildRoleRepository::new(self.db);
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);
@@ -47,11 +68,12 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         let matching_discord_role_ids: Vec<u64> = db_roles
             .iter()
             .filter_map(|db_role| {
-                db_role
-                    .role_id
-                    .parse::<u64>()
-                    .ok()
-                    .filter(|id| user_role_ids.contains(id))
+                let role_id = db_role.role_id;
+                if user_role_ids.contains(&role_id) {
+                    Some(role_id)
+                } else {
+                    None
+                }
             })
             .collect();
 
@@ -70,7 +92,7 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         Ok(())
     }
 
-    /// Syncs role memberships for all logged-in users in a guild
+    /// Syncs role memberships for all logged-in users in a guild.
     ///
     /// Updates role memberships for all users who have logged into the application and are
     /// members of the specified guild. Only processes logged-in users and only syncs roles
@@ -78,12 +100,12 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     /// while the bot was offline. Updates the last_role_sync_at timestamp for all synced users.
     ///
     /// # Arguments
-    /// - `guild_id`: Discord's unique identifier for the guild (u64)
-    /// - `members`: Slice of Discord Member objects for users in the guild
+    /// - `guild_id` - Discord guild ID
+    /// - `members` - Slice of Discord Member objects for users in the guild
     ///
     /// # Returns
-    /// - `Ok(())`: Sync completed successfully and timestamps updated
-    /// - `Err(AppError)`: Database error during user query or role sync
+    /// - `Ok(())` - Sync completed successfully and timestamps updated
+    /// - `Err(AppError::Database)` - Database error during user query or role sync
     pub async fn sync_guild_member_roles(
         &self,
         guild_id: u64,
@@ -159,18 +181,20 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         Ok(())
     }
 
-    /// Adds a single role to a user
+    /// Adds a single role to a user.
     ///
     /// Creates a relationship indicating the user has the specified role. Looks up the role
-    /// in the database by its Discord role ID and creates the relationship if found.
+    /// in the database by its Discord role ID and creates the relationship if found. Logs
+    /// a warning if the role doesn't exist in the database. Used for handling individual
+    /// role addition events from Discord.
     ///
     /// # Arguments
-    /// - `user_id`: Discord user ID (u64)
-    /// - `role_id`: Discord's unique identifier for the role (u64)
+    /// - `user_id` - Discord user ID
+    /// - `role_id` - Discord role ID to add
     ///
     /// # Returns
-    /// - `Ok(())`: Role relationship created successfully
-    /// - `Err(AppError)`: Database error during role lookup or creation
+    /// - `Ok(())` - Role relationship created successfully or role not in database
+    /// - `Err(AppError::Database)` - Database error during role lookup or creation
     #[allow(dead_code)]
     pub async fn add_user_role(&self, user_id: u64, role_id: u64) -> Result<(), AppError> {
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);
@@ -196,18 +220,20 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         Ok(())
     }
 
-    /// Removes a single role from a user
+    /// Removes a single role from a user.
     ///
     /// Deletes the relationship indicating the user has the specified role. Looks up the role
-    /// in the database by its Discord role ID and removes the relationship if found.
+    /// in the database by its Discord role ID and removes the relationship if found. Logs
+    /// a debug message if the role doesn't exist in the database. Used for handling individual
+    /// role removal events from Discord.
     ///
     /// # Arguments
-    /// - `user_id`: Discord user ID (u64)
-    /// - `role_id`: Discord's unique identifier for the role (u64)
+    /// - `user_id` - Discord user ID
+    /// - `role_id` - Discord role ID to remove
     ///
     /// # Returns
-    /// - `Ok(())`: Role relationship removed successfully
-    /// - `Err(AppError)`: Database error during role lookup or deletion
+    /// - `Ok(())` - Role relationship removed successfully or role not in database
+    /// - `Err(AppError::Database)` - Database error during role lookup or deletion
     #[allow(dead_code)]
     pub async fn remove_user_role(&self, user_id: u64, role_id: u64) -> Result<(), AppError> {
         let user_role_repo = UserDiscordGuildRoleRepository::new(self.db);

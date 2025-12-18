@@ -1,17 +1,15 @@
-//! Parameter models for ping format data operations.
+//! Domain models for ping format data operations.
 //!
-//! This module defines the parameter models used internally on the server for ping format
-//! and ping format field operations. These models serve as the boundary between the data
-//! layer and service/controller layers, with conversion methods to/from entity models and DTOs.
+//! Defines ping format and field models that structure fleet notification messages.
 
 use crate::model::ping_format::{PingFormatDto, PingFormatFieldDto};
 
-/// Represents a ping format with full data from the database.
+/// Ping format template for structuring fleet notification messages.
 ///
-/// Contains all ping format information including ID, guild ID, and name.
-/// This is the primary model returned by repository methods.
+/// Defines the overall format with a name and guild association. Contains multiple
+/// fields that structure the data displayed in fleet pings.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PingFormatParam {
+pub struct PingFormat {
     /// Unique identifier for the ping format.
     pub id: i32,
     /// Discord guild ID (stored as String in database).
@@ -20,20 +18,16 @@ pub struct PingFormatParam {
     pub name: String,
 }
 
-impl PingFormatParam {
-    /// Converts the ping format param to a DTO for API responses.
-    ///
-    /// Note: This conversion only includes basic fields. Additional data like fields,
-    /// fleet_category_count, and fleet_category_names must be provided separately.
+impl PingFormat {
+    /// Converts the ping format domain model to a DTO for API responses.
     ///
     /// # Arguments
-    /// - `self`: The ping format param to convert
-    /// - `fields`: Vector of ping format field DTOs
-    /// - `fleet_category_count`: Number of fleet categories using this format
-    /// - `fleet_category_names`: Names of fleet categories using this format
+    /// - `fields` - Vector of ping format field DTOs
+    /// - `fleet_category_count` - Number of fleet categories using this format
+    /// - `fleet_category_names` - Names of fleet categories using this format
     ///
     /// # Returns
-    /// - `PingFormatDto`: The converted ping format DTO with guild_id as u64
+    /// - `PingFormatDto` - The converted ping format DTO with guild_id as u64
     pub fn into_dto(
         self,
         fields: Vec<PingFormatFieldDto>,
@@ -50,16 +44,13 @@ impl PingFormatParam {
         }
     }
 
-    /// Converts an entity model to a ping format param.
-    ///
-    /// This conversion happens at the data layer boundary to ensure entity models
-    /// never leak into service or controller layers.
+    /// Converts an entity model to a ping format domain model at the repository boundary.
     ///
     /// # Arguments
-    /// - `entity`: The entity model from the database
+    /// - `entity` - The entity model from the database
     ///
     /// # Returns
-    /// - `PingFormatParam`: The converted ping format param
+    /// - `PingFormat` - The converted ping format domain model
     pub fn from_entity(entity: entity::ping_format::Model) -> Self {
         Self {
             id: entity.id,
@@ -69,9 +60,9 @@ impl PingFormatParam {
     }
 }
 
-/// Parameters for creating a new ping format.
+/// Parameters for creating a new ping format template.
 ///
-/// Used when creating a new ping format in the database with initial field configuration.
+/// Creates a new ping format with a name. Fields are added separately after creation.
 #[derive(Debug, Clone)]
 pub struct CreatePingFormatParam {
     /// Discord guild ID as u64.
@@ -80,9 +71,9 @@ pub struct CreatePingFormatParam {
     pub name: String,
 }
 
-/// Parameters for updating an existing ping format.
+/// Parameters for updating an existing ping format template.
 ///
-/// Used when updating a ping format's name. Fields are managed separately.
+/// Updates only the ping format name. Fields are managed through separate operations.
 #[derive(Debug, Clone)]
 pub struct UpdatePingFormatParam {
     /// ID of the ping format to update.
@@ -91,12 +82,12 @@ pub struct UpdatePingFormatParam {
     pub name: String,
 }
 
-/// Represents a ping format field with full data from the database.
+/// Individual field within a ping format template.
 ///
-/// Contains all field information including ID, ping format ID, name, priority,
-/// and default value. Fields define the structure of ping messages.
+/// Defines a single data field in fleet ping messages with a name, display priority,
+/// and optional default value. Lower priority values are displayed first.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PingFormatFieldParam {
+pub struct PingFormatField {
     /// Unique identifier for the field.
     pub id: i32,
     /// ID of the ping format this field belongs to.
@@ -109,14 +100,11 @@ pub struct PingFormatFieldParam {
     pub default_value: Option<String>,
 }
 
-impl PingFormatFieldParam {
-    /// Converts the ping format field param to a DTO for API responses.
-    ///
-    /// # Arguments
-    /// - `self`: The ping format field param to convert
+impl PingFormatField {
+    /// Converts the ping format field domain model to a DTO for API responses.
     ///
     /// # Returns
-    /// - `PingFormatFieldDto`: The converted field DTO
+    /// - `PingFormatFieldDto` - The converted field DTO
     pub fn into_dto(self) -> PingFormatFieldDto {
         PingFormatFieldDto {
             id: self.id,
@@ -127,16 +115,13 @@ impl PingFormatFieldParam {
         }
     }
 
-    /// Converts an entity model to a ping format field param.
-    ///
-    /// This conversion happens at the data layer boundary to ensure entity models
-    /// never leak into service or controller layers.
+    /// Converts an entity model to a ping format field domain model at the repository boundary.
     ///
     /// # Arguments
-    /// - `entity`: The entity model from the database
+    /// - `entity` - The entity model from the database
     ///
     /// # Returns
-    /// - `PingFormatFieldParam`: The converted field param
+    /// - `PingFormatField` - The converted field domain model
     pub fn from_entity(entity: entity::ping_format_field::Model) -> Self {
         Self {
             id: entity.id,
@@ -148,9 +133,7 @@ impl PingFormatFieldParam {
     }
 }
 
-/// Parameters for creating a new ping format field.
-///
-/// Used when creating a new field for an existing ping format.
+/// Parameters for creating a new field in a ping format template.
 #[derive(Debug, Clone)]
 pub struct CreatePingFormatFieldParam {
     /// ID of the ping format this field belongs to.
@@ -163,9 +146,7 @@ pub struct CreatePingFormatFieldParam {
     pub default_value: Option<String>,
 }
 
-/// Parameters for updating an existing ping format field.
-///
-/// Used when updating a field's name, priority, or default value.
+/// Parameters for updating an existing ping format field's properties.
 #[derive(Debug, Clone)]
 pub struct UpdatePingFormatFieldParam {
     /// ID of the field to update.
@@ -176,4 +157,145 @@ pub struct UpdatePingFormatFieldParam {
     pub priority: i32,
     /// New default value for the field.
     pub default_value: Option<String>,
+}
+
+/// Complete ping format with fields and usage metadata.
+///
+/// Combines the ping format with its fields and information about which
+/// fleet categories are using this format. Used for service layer operations
+/// that need the complete format data.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PingFormatWithFields {
+    /// The ping format.
+    pub ping_format: PingFormat,
+    /// Fields belonging to this ping format.
+    pub fields: Vec<PingFormatField>,
+    /// Number of fleet categories using this format.
+    pub fleet_category_count: u64,
+    /// Names of fleet categories using this format.
+    pub fleet_category_names: Vec<String>,
+}
+
+impl PingFormatWithFields {
+    /// Converts the complete ping format to a DTO for API responses.
+    ///
+    /// Parses the stored String guild_id into u64 for the DTO. If parsing fails,
+    /// returns an error.
+    ///
+    /// # Returns
+    /// - `Ok(PingFormatDto)` - Successfully converted DTO
+    /// - `Err(String)` - Failed to parse guild_id
+    pub fn into_dto(self) -> Result<crate::model::ping_format::PingFormatDto, String> {
+        let guild_id = self
+            .ping_format
+            .guild_id
+            .parse::<u64>()
+            .map_err(|e| format!("Failed to parse guild_id: {}", e))?;
+
+        let field_dtos = self.fields.into_iter().map(|f| f.into_dto()).collect();
+
+        Ok(crate::model::ping_format::PingFormatDto {
+            id: self.ping_format.id,
+            guild_id,
+            name: self.ping_format.name,
+            fields: field_dtos,
+            fleet_category_count: self.fleet_category_count,
+            fleet_category_names: self.fleet_category_names,
+        })
+    }
+}
+
+/// Paginated collection of ping formats with metadata.
+///
+/// Contains a page of ping formats along with pagination metadata for building
+/// paginated ping format management interfaces.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaginatedPingFormats {
+    /// Ping formats for this page.
+    pub ping_formats: Vec<PingFormatWithFields>,
+    /// Total number of ping formats across all pages.
+    pub total: u64,
+    /// Current page number (zero-indexed).
+    pub page: u64,
+    /// Number of ping formats per page.
+    pub per_page: u64,
+    /// Total number of pages.
+    pub total_pages: u64,
+}
+
+impl PaginatedPingFormats {
+    /// Converts the paginated ping formats to a DTO for API responses.
+    ///
+    /// Converts each ping format in the collection to a DTO. If any conversion fails,
+    /// returns an error immediately without processing remaining formats.
+    ///
+    /// # Returns
+    /// - `Ok(PaginatedPingFormatsDto)` - Successfully converted all formats
+    /// - `Err(String)` - Failed to parse guild_id for at least one format
+    pub fn into_dto(self) -> Result<crate::model::ping_format::PaginatedPingFormatsDto, String> {
+        let ping_formats = self
+            .ping_formats
+            .into_iter()
+            .map(|pf| pf.into_dto())
+            .collect::<Result<Vec<_>, String>>()?;
+
+        Ok(crate::model::ping_format::PaginatedPingFormatsDto {
+            ping_formats,
+            total: self.total,
+            page: self.page,
+            per_page: self.per_page,
+            total_pages: self.total_pages,
+        })
+    }
+}
+
+/// Parameters for creating a ping format with fields.
+///
+/// Contains all data needed to create a new ping format along with its fields
+/// in a single operation.
+#[derive(Debug, Clone)]
+pub struct CreatePingFormatWithFieldsParam {
+    /// Discord guild ID.
+    pub guild_id: u64,
+    /// Name of the ping format.
+    pub name: String,
+    /// Fields to create (name, priority, default_value).
+    pub fields: Vec<(String, i32, Option<String>)>,
+}
+
+/// Parameters for updating a ping format with fields.
+///
+/// Contains all data needed to update a ping format along with its fields.
+/// Fields with an id will be updated, fields without an id will be created,
+/// and existing fields not in the list will be deleted.
+#[derive(Debug, Clone)]
+pub struct UpdatePingFormatWithFieldsParam {
+    /// ID of the ping format to update.
+    pub id: i32,
+    /// Discord guild ID for verification.
+    pub guild_id: u64,
+    /// New name for the ping format.
+    pub name: String,
+    /// Fields to update/create (id, name, priority, default_value) - id is None for new fields.
+    pub fields: Vec<(Option<i32>, String, i32, Option<String>)>,
+}
+
+/// Parameters for getting paginated ping formats.
+#[derive(Debug, Clone)]
+pub struct GetPaginatedPingFormatsParam {
+    /// Discord guild ID to filter by.
+    pub guild_id: u64,
+    /// Zero-indexed page number.
+    pub page: u64,
+    /// Number of ping formats per page.
+    pub per_page: u64,
+}
+
+/// Parameters for deleting a ping format.
+#[derive(Debug, Clone)]
+pub struct DeletePingFormatParam {
+    /// ID of the ping format to delete.
+    pub id: i32,
+    /// Discord guild ID for verification.
+    pub guild_id: u64,
 }

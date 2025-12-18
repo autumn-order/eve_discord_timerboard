@@ -48,7 +48,7 @@ Frontend                  Backend
 Client Component    →    API Endpoint       →    Business Logic    →    Database
 (Dioxus)                 (Controller)            (Service)              (Data Repository)
 
- Uses: UserDto      →    Receives: UserDto   →    Uses: UserParam   →    Returns: UserParam
+ Uses: UserDto      →    Receives: UserDto   →    Uses: User         →    Returns: User
                         Converts to:               (CreateUserParam)       (converts entity)
                         CreateUserParam                                  
 ```
@@ -58,8 +58,8 @@ Client Component    →    API Endpoint       →    Business Logic    →    Da
 ```
 Database           →    Business Logic    →    API Endpoint       →    Frontend
                    
-Returns:           →    UserParam         →    UserDto            →    Displays UserDto
-UserParam               .into_dto()            (serialized JSON)
+Returns:           →    User              →    UserDto            →    Displays UserDto
+User                    .into_dto()            (serialized JSON)
 (converted from entity)
 ```
 
@@ -70,8 +70,8 @@ UserParam               .into_dto()            (serialized JSON)
 For each **domain** (e.g., `user`, `character`), we have these five pieces:
 
 #### 1. **Data Repository** - `server/data/user.rs`
-**Responsibility**: Database operations and entity-to-param conversion  
-**Uses**: `entity::user::Model` internally, **returns**: `UserParam` (domain model)  
+**Responsibility**: Database operations and entity-to-domain-model conversion  
+**Uses**: `entity::user::Model` internally, **returns**: `User` (domain model)  
 **Example**:
 
 ```rust
@@ -81,19 +81,19 @@ struct UserRepository<'a> {
 }
 
 impl<'a> UserRepository<'a> {
-    pub async fn create_user(&self, param: CreateUserParam) -> Result<UserParam> {
+    pub async fn create_user(&self, param: CreateUserParam) -> Result<User> {
         // Insert into database using entity model
         let entity = // ... database insert operation
         
-        // Convert entity to param at the infrastructure boundary
-        Ok(UserParam::from_entity(entity))
+        // Convert entity to domain model at the infrastructure boundary
+        Ok(User::from_entity(entity))
     }
 }
 ```
 
 ### 2. **Service** - `server/service/user.rs`
 **Responsibility**: Business logic and orchestration  
-**Uses**: `CreateUserParam`, `GetUserParam` (server-only param models)  
+**Uses**: `User` (domain model), `CreateUserParam`, `GetUserParam` (operation-specific params)  
 **Example**:
 
 ```rust
@@ -103,9 +103,9 @@ struct UserService<'a> {
 }
 
 impl<'a> UserService<'a> {
-    pub async fn create_user(&self, param: CreateUserParam) -> Result<UserParam> {
+    pub async fn create_user(&self, param: CreateUserParam) -> Result<User> {
         // Validate param
-        // Call data repository (already returns param)
+        // Call data repository (returns domain model)
         data::user::create_user(self.db, param).await
     }
 }
@@ -158,8 +158,51 @@ pub async fn create_user(dto: CreateUserDto) -> Result<UserDto> {
 | Model Type | Location | Derives Serialize? | Used Where | Purpose |
 |------------|----------|-------------------|------------|---------|
 | **Entity Model** | `entity/user.rs` | ❌ | Data layer internally | Direct database representation (ORM) |
-| **Param Model** | `server/model/user.rs` | ❌ | Data ↔ Service ↔ Controller | Domain models (business logic) |
+| **Domain Model** | `server/model/user.rs` | ❌ | Data ↔ Service ↔ Controller | Core business entities (e.g., `User`, `Character`) |
+| **Param Model** | `server/model/user.rs` | ❌ | Service ↔ Controller | Operation-specific parameters (e.g., `CreateUserParam`, `UpdateUserParam`) |
 | **DTO Model** | `model/user.rs` | ✅ | Controller ↔ Frontend | API data transfer (JSON) |
+
+---
+
+## Domain Models vs Parameter Models
+
+It's important to distinguish between these two types in `server/model/`:
+
+### Domain Models
+**Purpose**: Represent complete business entities  
+**Naming**: `{Domain}` (e.g., `User`, `Character`, `DiscordGuild`)  
+**Usage**: Returned from repositories, passed between layers as complete entities
+
+```rust
+/// Represents a complete user entity
+pub struct User {
+    pub id: i32,
+    pub name: String,
+    pub email: String,
+}
+```
+
+### Parameter Models (`Param` Suffix)
+**Purpose**: Contain data for specific operations  
+**Naming**: `{Action}{Domain}Param` (e.g., `CreateUserParam`, `UpdateUserParam`, `GetUserParam`)  
+**Usage**: Input parameters for operations that differ from the complete domain model
+
+```rust
+/// Parameters for creating a new user (no id yet)
+pub struct CreateUserParam {
+    pub name: String,
+    pub email: String,
+}
+
+/// Parameters for querying a user
+pub struct GetUserParam {
+    pub id: i32,
+}
+```
+
+**Rule of Thumb**: 
+- If it represents a **complete entity**, don't use `Param` suffix → `User`, `Character`, `DiscordGuild`
+- If it represents **operation-specific data**, use `Param` suffix → `CreateUserParam`, `UpdateTimerParam`
 
 ---
 
@@ -167,16 +210,19 @@ pub async fn create_user(dto: CreateUserDto) -> Result<UserDto> {
 
 ✅ **DO:**
 - Use **entity models** only inside `server/data/` functions (never return them)
-- **Data layer returns param models** - convert entities to params at the infrastructure boundary
-- Use **param models** between data/service/controller (server internal)
+- **Data layer returns domain models** - convert entities to domain models at the infrastructure boundary
+- Use **domain models** as the primary type between data/service/controller layers
+- Use **param models** for operation-specific input that differs from the domain model
 - Use **DTOs** only when crossing the API boundary (controller ↔ frontend)
-- Implement `into_dto()` on param models in `server/model/{domain}.rs`
-- Implement `from_entity()` on param models for data layer conversions
+- Implement `into_dto()` on domain models in `server/model/{domain}.rs`
+- Implement `from_entity()` on domain models for data layer conversions
 
 ❌ **DON'T:**
 - Don't return entity models from the data layer
 - Don't let entity models leak into services or controllers
 - Don't use DTOs inside services or data layer
+- Don't suffix domain models with `Param` (use `User`, not `UserParam`)
+- Don't use `Param` suffix unless it's operation-specific input data
 - Don't manually convert between models everywhere (use `into_dto()` and `From`/`Into` traits)
 
 ---
@@ -221,15 +267,15 @@ pub async fn create_user(dto: CreateUserDto) -> Result<UserDto> {
 4. Data layer queries: server/data/user.rs::get_user(param: GetUserParam)
    - Runs SQL: SELECT * FROM users WHERE id = 123
    - Gets entity::user::Model from database
-   - Converts entity to UserParam immediately
-   ↑ Returns UserParam
+   - Converts entity to User domain model immediately
+   ↑ Returns User
 
-5. Service receives UserParam
+5. Service receives User
    - Performs any additional business logic
-   ↑ Returns UserParam
+   ↑ Returns User
 
-6. Controller receives UserParam
-   - Calls param.into_dto()
+6. Controller receives User
+   - Calls user.into_dto()
    - Serializes to JSON
    ↑ Returns JSON UserDto
 
@@ -246,21 +292,26 @@ To avoid verbose conversion code, we implement these in `server/model/{domain}.r
 ```rust
 // In server/model/user.rs
 
-/// Represents a user with full data (typically from database)
-pub struct UserParam {
+/// Represents a complete user domain model
+pub struct User {
     pub id: i32,
     pub name: String,
     pub email: String,
 }
 
-/// Represents data needed to create a new user
+/// Parameters for creating a new user
 pub struct CreateUserParam {
     pub name: String,
     pub email: String,
 }
 
-impl UserParam {
-    /// Convert param to DTO for API responses
+/// Parameters for querying a user
+pub struct GetUserParam {
+    pub id: i32,
+}
+
+impl User {
+    /// Convert domain model to DTO for API responses
     pub fn into_dto(self) -> UserDto {
         UserDto {
             id: self.id,
@@ -269,7 +320,7 @@ impl UserParam {
         }
     }
     
-    /// Convert entity model to param
+    /// Convert entity model to domain model at repository boundary
     pub fn from_entity(entity: entity::user::Model) -> Self {
         Self {
             id: entity.id,
@@ -450,17 +501,17 @@ static USER_TAG: &str = "user";
 /// the database to retrieve information on the user, returning their user ID & name.
 /// 
 /// # Access Control
-/// - `LoggedIn`: Can only access this route if user is logged in
+/// - `LoggedIn` - Can only access this route if user is logged in
 /// 
 /// # Arguments
-/// - `state`: Application state containing the database connection for character lookup
-/// - `session`: User's session containing their user ID
+/// - `state` - Application state containing the database connection for character lookup
+/// - `session` - User's session containing their user ID
 /// 
 /// # Returns
-/// - `Ok(Some(UserDto))`: User's ID & name
-/// - `Ok(None)`: User not in session or not in database
-/// - `Err(DbErr(_))`: An error occurred retrieving user information from the database
-/// - `Err(SessionErr(_))`: An error occurred getting user ID from session
+/// - `Ok(Some(UserDto))` - User's ID & name
+/// - `Ok(None)` - User not in session or not in database
+/// - `Err(DbErr(_))` - An error occurred retrieving user information from the database
+/// - `Err(SessionErr(_))` - An error occurred getting user ID from session
 #[utoipa::path(
     get,
     path = "/api/user",
@@ -566,8 +617,8 @@ pub enum ConfigError {
     /// the value was rejected.
     ///
     /// # Fields
-    /// - `var`: Name of the environment variable with invalid value
-    /// - `reason`: Explanation of why the value is invalid
+    /// - `var` - Name of the environment variable with invalid value.
+    /// - `reason` - Explanation of why the value is invalid.
     #[error("Invalid value for environment variable {var}: {reason}")]
     InvalidEnvValue {
         /// Name of the environment variable with invalid value.
@@ -833,25 +884,47 @@ DTOs are used for data transfer between frontend and backend via API endpoints.
 - Use descriptive action prefixes: `Create`, `Update`, `Get`, `Delete`
 - Must derive `Serialize` and `Deserialize`
 
+## Domain Models (Server-Only)
+
+Domain models represent complete business entities used throughout the server layers.
+
+**Format**: `{Domain}` (no suffix - e.g., `User`, `Character`, `DiscordGuild`)
+
+**Location**: `server/model/{domain}.rs`
+
+**Examples**:
+- `User` - Complete user domain model
+- `Character` - Complete character domain model
+- `DiscordGuild` - Complete Discord guild domain model
+- `Timer` - Complete timer domain model
+
+**Rules**:
+- NO `Param` suffix for domain models (use `User`, not `UserParam`)
+- Must NOT derive `Serialize` or `Deserialize` (server-only)
+- Implement `into_dto()` method for conversion to DTOs
+- Implement `from_entity()` for conversion from entity models
+- Represent the complete state of a business entity
+
 ## Parameter Models (Server-Only)
 
-Param models are used internally on the server between data, service, and controller layers.
+Param models are operation-specific input types that differ from the complete domain model.
 
 **Format**: `{Action}{Domain}Param` (singular - use `Param`, not `Params`)
 
 **Location**: `server/model/{domain}.rs`
 
 **Examples**:
-- `UserParam` - Full user data from database
-- `CreateUserParam` - Data required to create a user in the database
-- `GetUserParam` - Parameters for fetching a user
+- `CreateUserParam` - Data required to create a user (no id yet)
+- `UpdateUserParam` - Data required to update a user
+- `GetUserParam` - Parameters for fetching a user (just id)
 - `UpdateTimerParam` - Parameters for updating a timer
 
 **Rules**:
-- Always use `Param` suffix (singular)
+- ONLY use `Param` suffix for operation-specific input types
+- Use action prefixes: `Create`, `Update`, `Get`, `Delete`, `Upsert`
 - Must NOT derive `Serialize` or `Deserialize` (server-only)
-- Implement `into_dto()` method for conversion to DTOs - require additional arguments if doesn't convert 1:1
-- Implement `from_entity()` for conversion from entity models - require additional arguments if doesn't convert 1:1
+- Should contain only the fields needed for that specific operation
+- If the operation uses the full domain model, don't create a param - use the domain model directly
 
 ## Repository Structs
 
@@ -870,6 +943,9 @@ Repository structs provide database operations for a specific domain.
 - Always use `Repository` suffix
 - Contain a lifetime parameter for database connection: `Repository<'a>`
 - Hold a `db: &'a DatabaseConnection` field
+- Methods accept operation-specific params (e.g., `CreateUserParam`) as input
+- Methods return domain models (e.g., `User`, `Character`) as output
+- Convert entity models to domain models at the repository boundary using `from_entity()`
 
 ## Service Structs
 
@@ -888,6 +964,9 @@ Service structs contain business logic between data and controller layers.
 - Always use `Service` suffix
 - Contain a lifetime parameter: `Service<'a>`
 - Hold a `db: &'a DatabaseConnection` field or any other fields required to be shared across service methods
+- Methods work primarily with domain models (e.g., `User`, `Character`)
+- Methods accept operation-specific params (e.g., `CreateUserParam`) for operations
+- Methods return domain models (e.g., `User`, `Character`) to controllers
 
 ## Controller Functions
 

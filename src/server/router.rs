@@ -4,7 +4,11 @@
 //! using utoipa. All API endpoints are registered here with their OpenAPI specifications,
 //! and Swagger UI is configured to provide interactive API documentation at `/api/docs`.
 
-use axum::Router;
+use axum::{
+    http::{header, HeaderValue, Method},
+    Router,
+};
+use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
@@ -28,15 +32,19 @@ use crate::{
         },
         user::{PaginatedUsersDto, UserDto},
     },
-    server::{controller, state::AppState},
+    server::{config::Config, controller, error::AppError, state::AppState},
 };
 
-/// Builds the application's HTTP router with all API endpoints and Swagger UI documentation.
+/// Creates the main router with CORS configuration and OpenAPI documentation.
+///
+/// Configures CORS based on the allowed origins from the application config.
+/// CORS is applied to all API routes with credentials support enabled for
+/// session-based authentication.
 ///
 /// Constructs an Axum router with all authentication, user management, admin, fleet, category,
 /// and discord endpoints registered. Each endpoint is annotated with OpenAPI specifications via
 /// utoipa, which are collected into a unified OpenAPI document. The router includes Swagger UI
-/// at `/api/docs` for interactive API exploration and testing.
+/// at `/api/docs` for interactive API exploration and testing (debug builds only).
 ///
 /// # Registered Endpoints
 ///
@@ -100,17 +108,13 @@ use crate::{
 /// - Test endpoints directly from the browser
 /// - Download the OpenAPI specification
 ///
-/// # Returns
-/// An Axum `Router<AppState>` configured with all routes and middleware, ready to be
-/// merged into the main application router.
+/// # Arguments
+/// - `config` - Application configuration containing CORS origins
 ///
-/// # Example
-/// ```ignore
-/// let app_state = AppState { db, http_client, oauth_client, worker, admin_code_service };
-/// let router = routes().with_state(app_state);
-/// // Router is now ready to serve HTTP requests
-/// ```
-pub fn router() -> Router<AppState> {
+/// # Returns
+/// - `Ok(Router<AppState>)` - Configured router with CORS layer applied
+/// - `Err(AppError::InternalError)` - If app_url fails to parse
+pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
     #[derive(OpenApi)]
     #[openapi(
         info(
@@ -164,7 +168,7 @@ pub fn router() -> Router<AppState> {
     )]
     struct ApiDoc;
 
-    let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         // Auth routes
         .routes(routes!(controller::auth::login))
         .routes(routes!(controller::auth::callback))
@@ -209,9 +213,35 @@ pub fn router() -> Router<AppState> {
         .split_for_parts();
 
     // Only serve Swagger UI in debug builds
-    if cfg!(debug_assertions) {
-        router.merge(SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", api))
+    let api_router = if cfg!(debug_assertions) {
+        api_router.merge(SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", api))
     } else {
-        router
-    }
+        api_router
+    };
+
+    // Parse app_url into HeaderValue for CORS configuration
+    let origin = config
+        .app_url
+        .parse::<HeaderValue>()
+        .map_err(|e| AppError::InternalError(format!("Failed to parse app_url: {}", e)))?;
+
+    // Configure CORS layer
+    let cors = CorsLayer::new()
+        .allow_origin(origin)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::COOKIE,
+        ])
+        .allow_credentials(true); // Required for session cookies
+
+    Ok(api_router.layer(cors))
 }

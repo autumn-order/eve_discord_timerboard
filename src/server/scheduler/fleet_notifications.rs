@@ -1,22 +1,48 @@
-use chrono::Utc;
+//! Fleet notification scheduler for automated Discord notifications.
+//!
+//! This module provides automated scheduling for fleet-related Discord notifications including:
+//! - Reminder notifications sent before fleet time based on category configuration
+//! - Form-up notifications sent when fleet time arrives
+//! - Hourly updates to upcoming fleets list messages in configured channels
+//!
+//! The scheduler runs two primary jobs:
+//! 1. Every minute: Check for fleets needing reminders or form-up notifications
+//! 2. Every hour: Update upcoming fleets list messages in all configured channels
+
+use chrono::{DateTime, Duration, Utc};
 use dioxus_logger::tracing;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serenity::http::Http;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
-use crate::server::{error::AppError, service::fleet_notification::FleetNotificationService};
+use crate::server::{
+    error::AppError, model::fleet::Fleet, service::fleet_notification::FleetNotificationService,
+};
 
-/// Starts the fleet notification scheduler
+/// Maximum age for sending form-up notifications.
 ///
-/// This scheduler runs every minute and checks for:
-/// - Fleets needing reminder notifications (based on category's ping_reminder time)
-/// - Fleets needing form-up notifications (fleet_time has passed)
+/// Form-up notifications will only be sent if the fleet time is within this duration
+/// from the current time. This prevents sending form-ups for very old fleets that
+/// may have been missed during downtime.
+static FORMUP_MAX_AGE: i64 = 5;
+
+/// Starts the fleet notification scheduler.
+///
+/// Initializes and starts two cron jobs:
+/// - Notifications job (every minute): Processes reminder and form-up notifications
+/// - List update job (every hour): Updates upcoming fleets list messages
+///
+/// The scheduler continues running until the application shuts down.
 ///
 /// # Arguments
-/// - `db`: Database connection
-/// - `discord_http`: Discord HTTP client for sending notifications
-/// - `app_url`: Application URL for embed links
+/// - `db` - Database connection for querying fleet and notification data
+/// - `discord_http` - Discord HTTP client for sending messages and embeds
+/// - `app_url` - Application base URL for generating fleet detail links in embeds
+///
+/// # Returns
+/// - `Ok(())` - Scheduler started successfully and is running
+/// - `Err(AppError::Scheduler(_))` - Failed to create or start the scheduler
 pub async fn start_scheduler(
     db: DatabaseConnection,
     discord_http: Arc<Http>,
@@ -36,6 +62,7 @@ pub async fn start_scheduler(
         let app_url = job_app_url.clone();
 
         Box::pin(async move {
+            tracing::debug!("Running fleet notifications job");
             if let Err(e) = process_fleet_notifications(&db, http, app_url).await {
                 tracing::error!("Error processing fleet notifications: {}", e);
             }
@@ -56,6 +83,7 @@ pub async fn start_scheduler(
         let app_url = list_app_url.clone();
 
         Box::pin(async move {
+            tracing::debug!("Running upcoming fleets list update job");
             if let Err(e) = process_upcoming_fleets_lists(&db, http, app_url).await {
                 tracing::error!("Error processing upcoming fleets lists: {}", e);
             }
@@ -65,12 +93,27 @@ pub async fn start_scheduler(
     scheduler.add(list_job).await?;
     scheduler.start().await?;
 
-    tracing::info!("Fleet notification scheduler started");
+    tracing::info!("Fleet notification scheduler started successfully");
 
     Ok(())
 }
 
-/// Processes fleet notifications for reminders and form-ups
+/// Processes fleet notifications for reminders and form-ups.
+///
+/// This function is called every minute by the scheduler and delegates to:
+/// - `process_reminders` - Sends reminder notifications for fleets approaching their fleet time
+/// - `process_formups` - Sends form-up notifications for fleets at their fleet time
+///
+/// Errors from individual notification types are logged but don't prevent processing
+/// of other notification types.
+///
+/// # Arguments
+/// - `db` - Database connection for querying fleet data
+/// - `discord_http` - Discord HTTP client for sending notifications
+/// - `app_url` - Application URL for embed links
+///
+/// # Returns
+/// - `Ok(())` - All notification processing completed (individual errors are logged)
 async fn process_fleet_notifications(
     db: &DatabaseConnection,
     discord_http: Arc<Http>,
@@ -91,24 +134,41 @@ async fn process_fleet_notifications(
     Ok(())
 }
 
-/// Processes fleets needing reminder notifications
+/// Processes fleets needing reminder notifications.
+///
+/// Queries the database for fleets that meet all reminder criteria:
+/// - Not hidden
+/// - Reminders not disabled for the fleet
+/// - Category has a reminder time configured
+/// - Current time is past the reminder time (fleet_time - category.ping_reminder)
+/// - Current time is before fleet time (not yet formed up)
+/// - No reminder notification has been sent yet
+///
+/// For each qualifying fleet, sends a reminder notification via the notification service.
+///
+/// # Arguments
+/// - `db` - Database connection for querying fleet and category data
+/// - `discord_http` - Discord HTTP client for sending reminder messages
+/// - `app_url` - Application URL for generating fleet detail links
+/// - `now` - Current UTC timestamp for calculating reminder times
+///
+/// # Returns
+/// - `Ok(())` - All reminders processed (individual send failures are logged)
+/// - `Err(DbErr(_))` - Database query failed
 async fn process_reminders(
     db: &DatabaseConnection,
     discord_http: Arc<Http>,
     app_url: String,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // Query fleets that need reminders:
-    // 1. Not hidden
-    // 2. Reminders not disabled
-    // 3. Haven't been reminded yet (no reminder message)
-    // 4. Reminder time has passed (fleet_time - category.ping_reminder <= now)
-
+    // Query fleets that might need reminders
     let fleets = entity::prelude::Fleet::find()
         .filter(entity::fleet::Column::Hidden.eq(false))
         .filter(entity::fleet::Column::DisableReminder.eq(false))
         .all(db)
         .await?;
+
+    tracing::debug!("Checking {} fleets for reminders", fleets.len());
 
     for fleet in fleets {
         // Get category to check ping_reminder
@@ -119,10 +179,10 @@ async fn process_reminders(
         if let Some(category) = category {
             if let Some(reminder_seconds) = category.ping_reminder {
                 // Calculate reminder time
-                let reminder_duration = chrono::Duration::seconds(reminder_seconds as i64);
+                let reminder_duration = Duration::seconds(reminder_seconds as i64);
                 let reminder_time = fleet.fleet_time - reminder_duration;
 
-                // Check if reminder time has passed
+                // Check if reminder time has passed but fleet time hasn't
                 if now >= reminder_time && now < fleet.fleet_time {
                     // Check if reminder already sent
                     let existing_reminder = entity::prelude::FleetMessage::find()
@@ -132,8 +192,12 @@ async fn process_reminders(
                         .await?;
 
                     if existing_reminder.is_none() {
-                        // Send reminder
-                        tracing::info!("Sending reminder for fleet {} ({})", fleet.id, fleet.name);
+                        tracing::debug!(
+                            "Sending reminder for fleet {} ({}) scheduled for {}",
+                            fleet.id,
+                            fleet.name,
+                            fleet.fleet_time
+                        );
 
                         let notification_service = FleetNotificationService::new(
                             db,
@@ -141,24 +205,27 @@ async fn process_reminders(
                             app_url.clone(),
                         );
 
-                        // Get field values
+                        // Get field values for the fleet
                         let field_values = entity::prelude::FleetFieldValue::find()
                             .filter(entity::fleet_field_value::Column::FleetId.eq(fleet.id))
                             .all(db)
                             .await?;
 
-                        let field_values_map: std::collections::HashMap<i32, String> = field_values
+                        let field_values_map: HashMap<i32, String> = field_values
                             .into_iter()
                             .map(|fv| (fv.field_id, fv.value))
                             .collect();
 
+                        let fleet_param = Fleet::from_entity(fleet.clone());
+
                         if let Err(e) = notification_service
-                            .post_fleet_reminder(&fleet, &field_values_map)
+                            .post_fleet_reminder(&fleet_param, &field_values_map)
                             .await
                         {
                             tracing::error!(
-                                "Failed to send reminder for fleet {}: {}",
+                                "Failed to send reminder for fleet {} ({}): {}",
                                 fleet.id,
+                                fleet.name,
                                 e
                             );
                         }
@@ -171,21 +238,37 @@ async fn process_reminders(
     Ok(())
 }
 
-/// Processes fleets needing form-up notifications
+/// Processes fleets needing form-up notifications.
+///
+/// Queries the database for fleets that meet form-up criteria:
+/// - Fleet time has passed
+/// - No form-up notification has been sent yet
+/// - Fleet time is within the maximum age window (prevents very old fleets)
+///
+/// For each qualifying fleet, sends a form-up notification via the notification service.
+///
+/// # Arguments
+/// - `db` - Database connection for querying fleet data
+/// - `discord_http` - Discord HTTP client for sending form-up messages
+/// - `app_url` - Application URL for generating fleet detail links
+/// - `now` - Current UTC timestamp for checking fleet time and age
+///
+/// # Returns
+/// - `Ok(())` - All form-ups processed (individual send failures are logged)
+/// - `Err(DbErr(_))` - Database query failed
 async fn process_formups(
     db: &DatabaseConnection,
     discord_http: Arc<Http>,
     app_url: String,
-    now: chrono::DateTime<Utc>,
+    now: DateTime<Utc>,
 ) -> Result<(), AppError> {
-    // Query fleets that need form-up notifications:
-    // 1. Fleet time has passed
-    // 2. Haven't sent form-up yet (no formup message)
-
+    // Query fleets that might need form-up notifications
     let fleets = entity::prelude::Fleet::find()
         .filter(entity::fleet::Column::FleetTime.lte(now))
         .all(db)
         .await?;
+
+    tracing::debug!("Checking {} fleets for form-ups", fleets.len());
 
     for fleet in fleets {
         // Check if form-up already sent
@@ -196,33 +279,52 @@ async fn process_formups(
             .await?;
 
         if existing_formup.is_none() {
-            // Only send form-up if fleet time is within the last 5 minutes
+            // Only send form-up if fleet time is within the maximum age
             // This prevents sending form-ups for very old fleets
-            let five_minutes_ago = now - chrono::Duration::minutes(5);
+            let max_age = now - Duration::minutes(FORMUP_MAX_AGE);
 
-            if fleet.fleet_time >= five_minutes_ago {
-                tracing::info!("Sending form-up for fleet {} ({})", fleet.id, fleet.name);
+            if fleet.fleet_time >= max_age {
+                tracing::debug!(
+                    "Sending form-up for fleet {} ({}) scheduled for {}",
+                    fleet.id,
+                    fleet.name,
+                    fleet.fleet_time
+                );
 
                 let notification_service =
                     FleetNotificationService::new(db, discord_http.clone(), app_url.clone());
 
-                // Get field values
+                // Get field values for the fleet
                 let field_values = entity::prelude::FleetFieldValue::find()
                     .filter(entity::fleet_field_value::Column::FleetId.eq(fleet.id))
                     .all(db)
                     .await?;
 
-                let field_values_map: std::collections::HashMap<i32, String> = field_values
+                let field_values_map: HashMap<i32, String> = field_values
                     .into_iter()
                     .map(|fv| (fv.field_id, fv.value))
                     .collect();
 
+                let fleet_param = Fleet::from_entity(fleet.clone());
+
                 if let Err(e) = notification_service
-                    .post_fleet_formup(&fleet, &field_values_map)
+                    .post_fleet_formup(&fleet_param, &field_values_map)
                     .await
                 {
-                    tracing::error!("Failed to send form-up for fleet {}: {}", fleet.id, e);
+                    tracing::error!(
+                        "Failed to send form-up for fleet {} ({}): {}",
+                        fleet.id,
+                        fleet.name,
+                        e
+                    );
                 }
+            } else {
+                tracing::debug!(
+                    "Skipping form-up for old fleet {} ({}) from {}",
+                    fleet.id,
+                    fleet.name,
+                    fleet.fleet_time
+                );
             }
         }
     }
@@ -230,13 +332,30 @@ async fn process_formups(
     Ok(())
 }
 
-/// Processes upcoming fleets lists for all configured channels
+/// Processes upcoming fleets lists for all configured channels.
+///
+/// Queries all unique Discord channels that have fleet categories configured,
+/// then updates or posts the upcoming fleets list message in each channel.
+/// This provides users with a consolidated view of upcoming fleets in each
+/// configured notification channel.
+///
+/// Individual channel update failures are logged but don't prevent updates to
+/// other channels.
+///
+/// # Arguments
+/// - `db` - Database connection for querying channel and fleet data
+/// - `discord_http` - Discord HTTP client for posting/updating list messages
+/// - `app_url` - Application URL for generating fleet detail links
+///
+/// # Returns
+/// - `Ok(())` - All channel lists processed (individual update failures are logged)
+/// - `Err(DbErr(_))` - Database query failed
 async fn process_upcoming_fleets_lists(
     db: &DatabaseConnection,
     discord_http: Arc<Http>,
     app_url: String,
 ) -> Result<(), AppError> {
-    tracing::info!("Processing upcoming fleets lists");
+    tracing::trace!("Processing upcoming fleets lists update");
 
     // Get all unique channels that have fleet categories configured
     let channels = entity::prelude::FleetCategoryChannel::find()
@@ -247,6 +366,11 @@ async fn process_upcoming_fleets_lists(
     let mut channel_ids: Vec<String> = channels.into_iter().map(|c| c.channel_id).collect();
     channel_ids.sort();
     channel_ids.dedup();
+
+    tracing::debug!(
+        "Updating upcoming fleets lists for {} channels",
+        channel_ids.len()
+    );
 
     let notification_service = FleetNotificationService::new(db, discord_http, app_url);
 
@@ -260,8 +384,15 @@ async fn process_upcoming_fleets_lists(
                 channel_id,
                 e
             );
+        } else {
+            tracing::debug!(
+                "Successfully updated upcoming fleets list for channel {}",
+                channel_id
+            );
         }
     }
+
+    tracing::trace!("Completed upcoming fleets lists update");
 
     Ok(())
 }
