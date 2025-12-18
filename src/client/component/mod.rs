@@ -5,7 +5,6 @@ pub mod page;
 pub mod pagination;
 pub mod protected_layout;
 pub mod searchable_dropdown;
-pub mod utc_datetime_input;
 
 pub use header::Header;
 pub use layout::Layout;
