@@ -1,3 +1,9 @@
+//! Discord guild role service for managing guild role synchronization.
+//!
+//! This module provides the `DiscordGuildRoleService` for synchronizing Discord guild roles
+//! with the database. It handles bulk role updates during bot startup and provides paginated
+//! queries for role data used in the UI.
+
 use dioxus_logger::tracing;
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder};
 use serenity::all::{Role, RoleId};
@@ -8,16 +14,42 @@ use crate::{
     server::{data::discord::DiscordGuildRoleRepository, error::AppError},
 };
 
+/// Service for managing Discord guild roles.
+///
+/// Provides methods for synchronizing role data from Discord's API to the database
+/// and querying role information for display in the UI. Acts as the orchestration
+/// layer between Discord bot events and the role repository.
 pub struct DiscordGuildRoleService<'a> {
+    /// Database connection for repository operations.
     db: &'a DatabaseConnection,
 }
 
 impl<'a> DiscordGuildRoleService<'a> {
+    /// Creates a new DiscordGuildRoleService instance.
+    ///
+    /// # Arguments
+    /// - `db` - Reference to the database connection
+    ///
+    /// # Returns
+    /// - `DiscordGuildRoleService` - New service instance
     pub fn new(db: &'a DatabaseConnection) -> Self {
         Self { db }
     }
 
-    /// Updates roles for a guild by deleting roles that no longer exist and upserting current roles
+    /// Updates roles for a guild by syncing with Discord's current state.
+    ///
+    /// Performs a complete sync of guild roles by deleting roles that no longer exist
+    /// in Discord and upserting all current roles. This ensures the database accurately
+    /// reflects Discord's role structure. Used during bot startup and when significant
+    /// role changes occur in the guild.
+    ///
+    /// # Arguments
+    /// - `guild_id` - Discord guild ID to update roles for
+    /// - `guild_roles` - HashMap of current Discord roles from the API
+    ///
+    /// # Returns
+    /// - `Ok(())` - Roles synced successfully
+    /// - `Err(AppError::Database)` - Database error during deletion or upsert
     pub async fn update_roles(
         &self,
         guild_id: u64,
@@ -45,7 +77,21 @@ impl<'a> DiscordGuildRoleService<'a> {
         Ok(())
     }
 
-    /// Get paginated roles for a guild
+    /// Gets paginated roles for a guild.
+    ///
+    /// Retrieves a paginated list of roles for the specified guild, ordered by position
+    /// (Discord's role hierarchy). Converts database models to DTOs for API responses.
+    /// Used for displaying role lists in the UI and role selection interfaces.
+    ///
+    /// # Arguments
+    /// - `guild_id` - Discord guild ID to fetch roles for
+    /// - `page` - Zero-based page number
+    /// - `entries` - Number of roles per page
+    ///
+    /// # Returns
+    /// - `Ok(PaginatedDiscordGuildRolesDto)` - Paginated role list with metadata
+    /// - `Err(AppError::Database)` - Database error during fetch
+    /// - `Err(AppError::InternalError)` - Failed to parse guild_id or role_id
     pub async fn get_paginated(
         &self,
         guild_id: u64,
