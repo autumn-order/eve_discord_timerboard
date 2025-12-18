@@ -7,6 +7,8 @@
 use chrono::{DateTime, Utc};
 use sea_orm::DbErr;
 
+use crate::model::discord::DiscordGuildDto;
+
 /// Discord server (guild) with display properties and sync metadata.
 ///
 /// Tracks guild name, icon, and when the guild's roles, channels, and members
@@ -48,5 +50,20 @@ impl DiscordGuild {
             icon_hash: entity.icon_hash,
             last_sync_at: entity.last_sync_at,
         })
+    }
+
+    /// Converts the guild domain model to a DTO for API responses.
+    ///
+    /// Strips synchronization metadata (last_sync_at) and preserves only the
+    /// fields needed for client display: guild ID, name, and icon hash.
+    ///
+    /// # Returns
+    /// - `DiscordGuildDto` - The converted guild DTO
+    pub fn into_dto(self) -> DiscordGuildDto {
+        DiscordGuildDto {
+            guild_id: self.guild_id,
+            name: self.name,
+            icon_hash: self.icon_hash,
+        }
     }
 }

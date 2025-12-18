@@ -9,6 +9,7 @@ use tower_sessions::Session;
 use crate::server::{
     error::AppError,
     middleware::auth::AuthGuard,
+    model::user::GetUserParam,
     service::{category::FleetCategoryService, user::UserService},
     state::AppState,
 };
@@ -37,10 +38,16 @@ pub async fn get_user_guilds(
         .parse::<u64>()
         .map_err(|e| AppError::InternalError(format!("Failed to parse user discord_id: {}", e)))?;
 
-    let user_service = UserService::new(&state.db);
-    let guilds = user_service.get_user_guilds(user_id).await?;
+    let param = GetUserParam {
+        discord_id: user_id,
+    };
 
-    Ok((StatusCode::OK, Json(guilds)))
+    let user_service = UserService::new(&state.db);
+    let guilds = user_service.get_user_guilds(param).await?;
+
+    let guild_dtos = guilds.into_iter().map(|g| g.into_dto()).collect::<Vec<_>>();
+
+    Ok((StatusCode::OK, Json(guild_dtos)))
 }
 
 /// GET /api/user/guilds/{guild_id}/manageable-categories - Get fleet categories user can create/manage

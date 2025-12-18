@@ -12,6 +12,7 @@ use crate::{
         controller::auth::{SESSION_AUTH_ADDING_BOT, SESSION_AUTH_CSRF_TOKEN},
         error::AppError,
         middleware::auth::{AuthGuard, Permission},
+        model::user::{GetAllUsersParam, SetAdminParam},
         service::{admin::bot::DiscordBotService, user::UserService},
         state::AppState,
     },
@@ -64,11 +65,17 @@ pub async fn get_all_users(
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
 
-    let users = user_service
-        .get_all_users(query.page, query.per_page)
-        .await?;
+    let param = GetAllUsersParam {
+        page: query.page,
+        per_page: query.per_page,
+    };
 
-    Ok(Json(users))
+    let paginated_users = user_service.get_all_users(param).await?;
+    let dto = paginated_users
+        .into_dto()
+        .map_err(|e| AppError::InternalError(format!("Failed to convert users to DTO: {}", e)))?;
+
+    Ok(Json(dto))
 }
 
 pub async fn get_all_admins(
@@ -81,8 +88,13 @@ pub async fn get_all_admins(
     let _ = auth_guard.require(&[Permission::Admin]).await?;
 
     let admins = user_service.get_all_admins().await?;
+    let admin_dtos = admins
+        .into_iter()
+        .map(|u| u.into_dto())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| AppError::InternalError(format!("Failed to convert admins to DTO: {}", e)))?;
 
-    Ok(Json(admins))
+    Ok(Json(admin_dtos))
 }
 
 pub async fn add_admin(
@@ -95,7 +107,12 @@ pub async fn add_admin(
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
 
-    user_service.add_admin(user_id).await?;
+    let param = SetAdminParam {
+        discord_id: user_id,
+        is_admin: true,
+    };
+
+    user_service.add_admin(param).await?;
 
     Ok(Json(SuccessDto { success: true }))
 }
@@ -121,7 +138,12 @@ pub async fn remove_admin(
         ));
     }
 
-    user_service.remove_admin(user_id).await?;
+    let param = SetAdminParam {
+        discord_id: user_id,
+        is_admin: false,
+    };
+
+    user_service.remove_admin(param).await?;
 
     Ok(Json(SuccessDto { success: true }))
 }

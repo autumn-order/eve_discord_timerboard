@@ -134,11 +134,19 @@ pub async fn get_user(
         AppError::InternalError(format!("Failed to parse user_id from session: {}", e))
     })?;
 
-    let Some(user) = user_service.get_user(user_id).await? else {
+    let param = crate::server::model::user::GetUserParam {
+        discord_id: user_id,
+    };
+
+    let Some(user) = user_service.get_user(param).await? else {
         return Err(AuthError::UserNotInDatabase(user_id).into());
     };
 
-    Ok((StatusCode::OK, Json(user)))
+    let user_dto = user
+        .into_dto()
+        .map_err(|e| AppError::InternalError(format!("Failed to convert user to DTO: {}", e)))?;
+
+    Ok((StatusCode::OK, Json(user_dto)))
 }
 
 async fn validate_csrf(session: &Session, csrf_state: &str) -> Result<(), AppError> {
