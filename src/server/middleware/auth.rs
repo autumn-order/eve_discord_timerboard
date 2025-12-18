@@ -5,6 +5,7 @@ use crate::server::{
     controller::auth::SESSION_AUTH_USER_ID,
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
+    model::user::UserParam,
 };
 
 pub enum Permission {
@@ -23,10 +24,7 @@ impl<'a> AuthGuard<'a> {
         Self { db, session }
     }
 
-    pub async fn require(
-        &self,
-        permissions: &[Permission],
-    ) -> Result<entity::user::Model, AppError> {
+    pub async fn require(&self, permissions: &[Permission]) -> Result<UserParam, AppError> {
         let user_repo = UserRepository::new(self.db);
 
         let Some(user_id_str) = self.session.get::<String>(SESSION_AUTH_USER_ID).await? else {

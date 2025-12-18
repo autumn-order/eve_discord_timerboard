@@ -12,6 +12,7 @@ use url::Url;
 use crate::server::{
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
+    model::user::UserParam,
     service::discord::UserDiscordGuildRoleService,
     state::OAuth2Client,
 };
@@ -58,7 +59,7 @@ impl<'a> AuthService<'a> {
         &self,
         authorization_code: String,
         set_admin: bool,
-    ) -> Result<entity::user::Model, AppError> {
+    ) -> Result<UserParam, AppError> {
         let user_repo = UserRepository::new(self.db);
 
         let auth_code = AuthorizationCode::new(authorization_code);
@@ -91,7 +92,7 @@ impl<'a> AuthService<'a> {
     /// so we only need to sync roles for logged-in users.
     async fn sync_user_data_if_needed(
         &self,
-        user: &entity::user::Model,
+        user: &UserParam,
         token: &StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     ) -> Result<(), AppError> {
         let now = Utc::now();
@@ -123,7 +124,7 @@ impl<'a> AuthService<'a> {
     /// Syncs user's role memberships
     async fn sync_roles(
         &self,
-        user: &entity::user::Model,
+        user: &UserParam,
         token: &StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
         user_guilds: &[PartialGuild],
     ) -> Result<(), AppError> {
