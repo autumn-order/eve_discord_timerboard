@@ -16,6 +16,7 @@ use crate::server::{
     },
     error::AppError,
     model::{
+        channel_fleet_list::UpsertChannelFleetListParam,
         fleet::FleetParam,
         fleet_message::{CreateFleetMessageParam, FleetMessageParam},
     },
@@ -458,7 +459,10 @@ impl<'a> FleetNotificationService<'a> {
                     Ok(_) => {
                         // Update the updated_at timestamp
                         list_repo
-                            .upsert(channel_id_str, &msg_id.to_string())
+                            .upsert(UpsertChannelFleetListParam {
+                                channel_id: channel_id_str.to_string(),
+                                message_id: msg_id.to_string(),
+                            })
                             .await?;
                         tracing::info!(
                             "Edited existing upcoming fleets list in channel {}",
@@ -502,7 +506,10 @@ impl<'a> FleetNotificationService<'a> {
                 match channel_id.send_message(&self.http, new_message).await {
                     Ok(msg) => {
                         list_repo
-                            .upsert(channel_id_str, &msg.id.to_string())
+                            .upsert(UpsertChannelFleetListParam {
+                                channel_id: channel_id_str.to_string(),
+                                message_id: msg.id.to_string(),
+                            })
                             .await?;
                         tracing::info!(
                             "Posted new upcoming fleets list in channel {}",
@@ -525,7 +532,10 @@ impl<'a> FleetNotificationService<'a> {
             match channel_id.send_message(&self.http, new_message).await {
                 Ok(msg) => {
                     list_repo
-                        .upsert(channel_id_str, &msg.id.to_string())
+                        .upsert(UpsertChannelFleetListParam {
+                            channel_id: channel_id_str.to_string(),
+                            message_id: msg.id.to_string(),
+                        })
                         .await?;
                     tracing::info!(
                         "Posted new upcoming fleets list in channel {}",
