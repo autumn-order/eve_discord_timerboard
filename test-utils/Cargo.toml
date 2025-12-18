@@ -1,0 +1,17 @@
+[package]
+name = "test-utils"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "test_utils"
+path = "src/lib.rs"
+
+[dependencies]
+sea-orm = { workspace = true, features = [
+  "runtime-tokio-rustls",
+  "sqlx-sqlite",
+  "with-chrono"
+] }
+thiserror = { workspace = true }

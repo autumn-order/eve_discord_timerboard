@@ -6658,6 +6658,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-utils"
+version = "0.1.0"
+dependencies = [
+ "sea-orm",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6759,6 +6767,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
+ "test-utils",
  "thiserror 2.0.17",
  "time",
  "tokio",
