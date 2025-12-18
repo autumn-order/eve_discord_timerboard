@@ -1,3 +1,9 @@
+//! Discord guild channel service for managing guild channel synchronization.
+//!
+//! This module provides the `DiscordGuildChannelService` for synchronizing Discord guild
+//! text channels with the database. It filters for text channels only, handles bulk channel
+//! updates during bot startup, and provides paginated queries for channel data used in the UI.
+
 use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
 use serenity::all::{ChannelId, ChannelType, GuildChannel};
@@ -8,28 +14,44 @@ use crate::{
     server::{data::discord::DiscordGuildChannelRepository, error::AppError},
 };
 
+/// Service for managing Discord guild channels.
+///
+/// Provides methods for synchronizing text channel data from Discord's API to the database
+/// and querying channel information for display in the UI. Only tracks text channels,
+/// excluding voice channels, categories, forums, and other channel types. Acts as the
+/// orchestration layer between Discord bot events and the channel repository.
 pub struct DiscordGuildChannelService<'a> {
+    /// Database connection for repository operations.
     db: &'a DatabaseConnection,
 }
 
 impl<'a> DiscordGuildChannelService<'a> {
+    /// Creates a new DiscordGuildChannelService instance.
+    ///
+    /// # Arguments
+    /// - `db` - Reference to the database connection
+    ///
+    /// # Returns
+    /// - `DiscordGuildChannelService` - New service instance
     pub fn new(db: &'a DatabaseConnection) -> Self {
         Self { db }
     }
 
-    /// Updates channels for a guild by deleting channels that no longer exist and upserting current text channels.
+    /// Updates channels for a guild by syncing with Discord's current state.
     ///
-    /// Filters for text channels only (excludes voice, category, forum, etc.).
-    /// Removes channels from the database that no longer exist in Discord.
-    /// Creates or updates all current text channels.
+    /// Performs a complete sync of guild text channels by filtering for text channels only
+    /// (excluding voice, category, forum, etc.), deleting channels that no longer exist in
+    /// Discord, and upserting all current text channels. This ensures the database accurately
+    /// reflects Discord's channel structure. Used during bot startup and when significant
+    /// channel changes occur in the guild.
     ///
     /// # Arguments
-    /// - `guild_id` - Discord's unique identifier for the guild
-    /// - `guild_channels` - HashMap of all channels in the guild
+    /// - `guild_id` - Discord guild ID to update channels for
+    /// - `guild_channels` - HashMap of all channels in the guild from Discord API
     ///
     /// # Returns
-    /// - `Ok(())` - Channels updated successfully
-    /// - `Err(AppError)` - Database error during sync
+    /// - `Ok(())` - Channels synced successfully
+    /// - `Err(AppError::Database)` - Database error during deletion or upsert
     pub async fn update_channels(
         &self,
         guild_id: u64,
@@ -73,20 +95,21 @@ impl<'a> DiscordGuildChannelService<'a> {
         Ok(())
     }
 
-    /// Retrieves paginated channels for a guild.
+    /// Gets paginated channels for a guild.
     ///
-    /// Fetches channels from the database with pagination support, converting
-    /// domain models to DTOs for API responses. Uses a simple offset-based
-    /// pagination approach.
+    /// Retrieves a paginated list of text channels for the specified guild, ordered by
+    /// position (Discord's channel order). Converts domain models to DTOs for API responses
+    /// using offset-based pagination. Used for displaying channel lists in the UI and
+    /// channel selection interfaces.
     ///
     /// # Arguments
-    /// - `guild_id` - Discord's unique identifier for the guild
-    /// - `page` - Page number (0-indexed)
-    /// - `entries` - Number of entries per page
+    /// - `guild_id` - Discord guild ID to fetch channels for
+    /// - `page` - Zero-based page number
+    /// - `entries` - Number of channels per page
     ///
     /// # Returns
-    /// - `Ok(PaginatedDiscordGuildChannelsDto)` - Paginated channel data with metadata
-    /// - `Err(AppError)` - Database error during query or entity conversion failure
+    /// - `Ok(PaginatedDiscordGuildChannelsDto)` - Paginated channel list with metadata
+    /// - `Err(AppError::Database)` - Database error during fetch
     pub async fn get_paginated(
         &self,
         guild_id: u64,
