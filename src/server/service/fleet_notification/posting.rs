@@ -1,17 +1,14 @@
-//! Fleet notification service for Discord message management.
+//! Fleet notification posting operations.
 //!
-//! This module provides the `FleetNotificationService` for managing Discord notifications
-//! related to fleet events. It orchestrates fleet message posting, updates, and cancellations
-//! across configured Discord channels with role pings and embedded fleet information. The
-//! service also maintains an "upcoming fleets" list message that provides a centralized view
-//! of scheduled events in each channel.
+//! This module provides methods for posting new fleet notifications to Discord channels.
+//! It handles creation messages, reminder messages, formup messages, and the upcoming
+//! fleets list that displays all scheduled events in a channel.
 
 use dioxus_logger::tracing;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serenity::{
     all::{
-        ChannelId, CreateEmbed, CreateMessage, EditMessage, GuildId, MessageId, MessageReference,
-        Timestamp,
+        ChannelId, CreateEmbed, CreateMessage, EditMessage, MessageId, MessageReference, Timestamp,
     },
     http::Http,
 };
@@ -30,23 +27,20 @@ use crate::server::{
     },
 };
 
-/// Service providing Discord notification operations for fleet events.
-///
-/// This struct holds references to the database connection, Discord HTTP client, and
-/// application URL. It provides methods for posting fleet notifications (creation,
-/// reminders, formup), updating existing messages, cancelling fleets, and maintaining
-/// an upcoming fleets list in configured channels.
-pub struct FleetNotificationService<'a> {
+use super::builder::FleetNotificationBuilder;
+
+/// Service struct for posting fleet notifications.
+pub struct FleetNotificationPosting<'a> {
     /// Database connection for accessing fleet and notification data
-    db: &'a DatabaseConnection,
-    /// Discord HTTP client for sending and editing messages
-    http: Arc<Http>,
+    pub db: &'a DatabaseConnection,
+    /// Discord HTTP client for sending messages
+    pub http: Arc<Http>,
     /// Base application URL for embedding links in notifications
-    app_url: String,
+    pub app_url: String,
 }
 
-impl<'a> FleetNotificationService<'a> {
-    /// Creates a new FleetNotificationService instance.
+impl<'a> FleetNotificationPosting<'a> {
+    /// Creates a new FleetNotificationPosting instance.
     ///
     /// # Arguments
     /// - `db` - Reference to the database connection
@@ -54,7 +48,7 @@ impl<'a> FleetNotificationService<'a> {
     /// - `app_url` - Base URL of the application for embedding in notifications
     ///
     /// # Returns
-    /// - `FleetNotificationService` - New service instance
+    /// - `FleetNotificationPosting` - New posting service instance
     pub fn new(db: &'a DatabaseConnection, http: Arc<Http>, app_url: String) -> Self {
         Self { db, http, app_url }
     }
@@ -166,226 +160,6 @@ impl<'a> FleetNotificationService<'a> {
             Some(existing_messages),
         )
         .await
-    }
-
-    /// Updates all existing fleet messages with new fleet information.
-    ///
-    /// Edits all Discord messages associated with the fleet to reflect updated details.
-    /// Continues updating remaining messages even if individual updates fail. Uses blue
-    /// embed color (0x3498db) for updates. Logs errors for failed updates but doesn't
-    /// propagate them to allow partial success.
-    ///
-    /// # Arguments
-    /// - `fleet` - Updated fleet domain model with current event details
-    /// - `field_values` - Map of field_id to value for custom ping format fields
-    ///
-    /// # Returns
-    /// - `Ok(())` - Successfully updated all messages (or no messages exist)
-    /// - `Err(AppError::NotFound)` - Fleet category or ping format not found
-    /// - `Err(AppError::InternalError)` - Invalid ID format or timestamp
-    /// - `Err(AppError::Database)` - Database error retrieving messages or fields
-    pub async fn update_fleet_messages(
-        &self,
-        fleet: &Fleet,
-        field_values: &std::collections::HashMap<i32, String>,
-    ) -> Result<(), AppError> {
-        let message_repo = FleetMessageRepository::new(self.db);
-        let category_repo = FleetCategoryRepository::new(self.db);
-
-        // Get all existing messages for this fleet
-        let messages = message_repo.get_by_fleet_id(fleet.id).await?;
-
-        if messages.is_empty() {
-            return Ok(());
-        }
-
-        // Get category data
-        let category_data = category_repo
-            .get_by_id(fleet.category_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound("Fleet category not found".to_string()))?;
-
-        // Get guild_id for fetching commander name
-        let guild_id = category_data
-            .category
-            .guild_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Invalid guild_id: {}", e)))?;
-
-        // Get ping format fields
-        let ping_format = category_data
-            .ping_format
-            .ok_or_else(|| AppError::NotFound("Ping format not found".to_string()))?;
-
-        let fields = entity::prelude::PingFormatField::find()
-            .filter(entity::ping_format_field::Column::PingFormatId.eq(ping_format.id))
-            .all(self.db)
-            .await?;
-
-        // Fetch commander name from Discord
-        let commander_name = self.get_commander_name(fleet, guild_id).await?;
-
-        // Build updated embed (use blue color for updates)
-        let embed = self
-            .build_fleet_embed(
-                fleet,
-                &fields,
-                field_values,
-                0x3498db,
-                &commander_name,
-                &self.app_url,
-            )
-            .await?;
-
-        // Update each message
-        for message in messages {
-            let channel_id = message
-                .channel_id
-                .parse::<u64>()
-                .map_err(|e| AppError::InternalError(format!("Invalid channel ID: {}", e)))?;
-            let msg_id = message
-                .message_id
-                .parse::<u64>()
-                .map_err(|e| AppError::InternalError(format!("Invalid message ID: {}", e)))?;
-
-            let channel_id = ChannelId::new(channel_id);
-            let msg_id = MessageId::new(msg_id);
-
-            let edit_builder = EditMessage::new().embed(embed.clone());
-
-            match self
-                .http
-                .edit_message(channel_id, msg_id, &edit_builder, vec![])
-                .await
-            {
-                Ok(_) => {
-                    tracing::info!("Updated fleet message {} in channel {}", msg_id, channel_id);
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to update fleet message {} in channel {}: {}",
-                        msg_id,
-                        channel_id,
-                        e
-                    );
-                    // Continue updating other messages even if one fails
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Cancels all existing fleet messages by editing them with cancellation notice.
-    ///
-    /// Edits all Discord messages associated with the fleet to display cancellation
-    /// information. Uses gray embed color (0x95a5a6) and includes cancellation timestamp
-    /// and cancelled-by information. Continues cancelling remaining messages even if
-    /// individual edits fail.
-    ///
-    /// # Arguments
-    /// - `fleet` - Fleet domain model being cancelled
-    ///
-    /// # Returns
-    /// - `Ok(())` - Successfully cancelled all messages (or no messages exist)
-    /// - `Err(AppError::NotFound)` - Fleet category not found
-    /// - `Err(AppError::InternalError)` - Invalid ID format or timestamp
-    /// - `Err(AppError::Database)` - Database error retrieving messages
-    pub async fn cancel_fleet_messages(&self, fleet: &Fleet) -> Result<(), AppError> {
-        let message_repo = FleetMessageRepository::new(self.db);
-        let category_repo = FleetCategoryRepository::new(self.db);
-
-        // Get all existing messages for this fleet
-        let messages = message_repo.get_by_fleet_id(fleet.id).await?;
-
-        if messages.is_empty() {
-            return Ok(());
-        }
-
-        // Get category data for guild_id
-        let category_data = category_repo
-            .get_by_id(fleet.category_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound("Fleet category not found".to_string()))?;
-
-        let guild_id = category_data
-            .category
-            .guild_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Invalid guild_id: {}", e)))?;
-
-        // Fetch commander name from Discord
-        let commander_name = self.get_commander_name(fleet, guild_id).await?;
-
-        let commander_id = fleet
-            .commander_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Invalid commander ID: {}", e)))?;
-
-        // Build cancellation embed
-        let now = chrono::Utc::now();
-        let timestamp = Timestamp::from_unix_timestamp(now.timestamp())
-            .map_err(|e| AppError::InternalError(format!("Invalid timestamp: {}", e)))?;
-
-        let embed = CreateEmbed::new()
-            .title(format!(".:{}  Cancelled:.", category_data.category.name))
-            .color(0x95a5a6) // Gray color for cancellation
-            .description(format!(
-                "{} posted by <@{}>, **{}**, scheduled for **{} UTC** (<t:{}:F>) was cancelled.",
-                category_data.category.name,
-                commander_id,
-                fleet.name,
-                fleet.fleet_time.format("%Y-%m-%d %H:%M"),
-                fleet.fleet_time.timestamp()
-            ))
-            .footer(serenity::all::CreateEmbedFooter::new(format!(
-                "Cancelled by: {}",
-                commander_name
-            )))
-            .timestamp(timestamp);
-
-        // Update each message with cancellation notice
-        for message in messages {
-            let channel_id = message
-                .channel_id
-                .parse::<u64>()
-                .map_err(|e| AppError::InternalError(format!("Invalid channel ID: {}", e)))?;
-            let msg_id = message
-                .message_id
-                .parse::<u64>()
-                .map_err(|e| AppError::InternalError(format!("Invalid message ID: {}", e)))?;
-
-            let channel_id = ChannelId::new(channel_id);
-            let msg_id = MessageId::new(msg_id);
-
-            // Clear content and set cancellation embed
-            let edit_builder = EditMessage::new().content("").embed(embed.clone());
-
-            match self
-                .http
-                .edit_message(channel_id, msg_id, &edit_builder, vec![])
-                .await
-            {
-                Ok(_) => {
-                    tracing::info!(
-                        "Cancelled fleet message {} in channel {}",
-                        msg_id,
-                        channel_id
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(
-                        "Failed to cancel fleet message {} in channel {}: {}",
-                        msg_id,
-                        channel_id,
-                        e
-                    );
-                    // Continue cancelling other messages even if one fails
-                }
-            }
-        }
-
-        Ok(())
     }
 
     /// Posts or updates the upcoming fleets list for a channel.
@@ -699,10 +473,11 @@ impl<'a> FleetNotificationService<'a> {
             .await?;
 
         // Fetch commander name from Discord
-        let commander_name = self.get_commander_name(fleet, guild_id).await?;
+        let builder = FleetNotificationBuilder::new(self.http.clone());
+        let commander_name = builder.get_commander_name(fleet, guild_id).await?;
 
         // Build embed
-        let embed = self
+        let embed = builder
             .build_fleet_embed(
                 fleet,
                 &fields,
@@ -800,135 +575,5 @@ impl<'a> FleetNotificationService<'a> {
         }
 
         Ok(())
-    }
-
-    /// Fetches the commander's Discord name from the guild.
-    ///
-    /// Attempts to retrieve the fleet commander's display name from the Discord guild.
-    /// Prefers the guild nickname if set, otherwise falls back to the Discord username.
-    /// If the member cannot be fetched (e.g., they left the guild), returns a fallback
-    /// string with their user ID.
-    ///
-    /// # Arguments
-    /// - `fleet` - Fleet domain model containing commander_id
-    /// - `guild_id` - Discord guild ID as u64 for member lookup
-    ///
-    /// # Returns
-    /// - `Ok(String)` - Commander's nickname, username, or "User {id}" fallback
-    /// - `Err(AppError::InternalError)` - Invalid commander ID format
-    async fn get_commander_name(&self, fleet: &Fleet, guild_id: u64) -> Result<String, AppError> {
-        let commander_id = fleet
-            .commander_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Invalid commander ID: {}", e)))?;
-
-        let guild_id = GuildId::new(guild_id);
-
-        // Try to fetch member from guild to get nickname
-        match self.http.get_member(guild_id, commander_id.into()).await {
-            Ok(member) => {
-                // Use nickname if available, otherwise use Discord username
-                Ok(member.nick.unwrap_or_else(|| member.user.name.clone()))
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to fetch commander {} from guild {}: {}",
-                    commander_id,
-                    guild_id,
-                    e
-                );
-                // Fallback to just the ID
-                Ok(format!("User {}", commander_id))
-            }
-        }
-    }
-
-    /// Builds a Discord embed for a fleet notification.
-    ///
-    /// Creates a rich embed with fleet details including FC mention, fleet time in both
-    /// UTC and local formats, custom ping format fields, and optional description. The
-    /// embed includes the fleet name as title, application URL as clickable link, and
-    /// a footer with the commander's name and current timestamp.
-    ///
-    /// # Arguments
-    /// - `fleet` - Fleet domain model containing event details
-    /// - `fields` - Ping format field definitions from the database
-    /// - `field_values` - Map of field_id to value for custom fields
-    /// - `color` - Embed color as hex integer
-    /// - `commander_name` - Display name of the fleet commander
-    /// - `app_url` - Base application URL for embed link
-    ///
-    /// # Returns
-    /// - `Ok(CreateEmbed)` - Discord embed ready for posting
-    /// - `Err(AppError::InternalError)` - Invalid commander ID or timestamp format
-    async fn build_fleet_embed(
-        &self,
-        fleet: &Fleet,
-        fields: &[entity::ping_format_field::Model],
-        field_values: &std::collections::HashMap<i32, String>,
-        color: u32,
-        commander_name: &str,
-        app_url: &str,
-    ) -> Result<CreateEmbed, AppError> {
-        let commander_id = fleet
-            .commander_id
-            .parse::<u64>()
-            .map_err(|e| AppError::InternalError(format!("Invalid commander ID: {}", e)))?;
-
-        let mut embed = CreateEmbed::new()
-            .title(&fleet.name)
-            .url(app_url)
-            .color(color)
-            .field("FC", format!("<@{}>", commander_id), false);
-
-        // Use current time for "sent at" timestamp
-        let now = chrono::Utc::now();
-        let timestamp = Timestamp::from_unix_timestamp(now.timestamp())
-            .map_err(|e| AppError::InternalError(format!("Invalid timestamp: {}", e)))?;
-
-        embed = embed
-            .field(
-                "Start Time (UTC)",
-                format!(
-                    "{} EVE Time",
-                    fleet.fleet_time.format("%Y-%m-%d %H:%M").to_string()
-                ),
-                false,
-            )
-            .field(
-                "Start Time (Local)",
-                format!(
-                    "<t:{}:F> - <t:{}:R>",
-                    fleet.fleet_time.timestamp(),
-                    fleet.fleet_time.timestamp()
-                ),
-                false,
-            );
-
-        // Add custom fields from ping format
-        for field in fields {
-            if let Some(value) = field_values.get(&field.id) {
-                if !value.is_empty() {
-                    embed = embed.field(&field.name, value, false);
-                }
-            }
-        }
-
-        // Add description if present
-        if let Some(description) = &fleet.description {
-            if !description.is_empty() {
-                embed = embed.field("Additional Information", description, false);
-            }
-        }
-
-        // Footer with commander name
-        embed = embed.footer(serenity::all::CreateEmbedFooter::new(format!(
-            "Sent by: {}",
-            commander_name
-        )));
-
-        embed = embed.timestamp(timestamp);
-
-        Ok(embed)
     }
 }
