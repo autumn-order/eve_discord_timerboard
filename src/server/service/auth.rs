@@ -12,7 +12,7 @@ use url::Url;
 use crate::server::{
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
-    model::user::UserParam,
+    model::user::{UpsertUserParam, UserParam},
     service::discord::UserDiscordGuildRoleService,
     state::OAuth2Client,
 };
@@ -74,7 +74,13 @@ impl<'a> AuthService<'a> {
         let user = self.fetch_discord_user(&token).await?;
         // Only update admin status if set_admin is true, otherwise preserve existing status
         let admin_update = if set_admin { Some(true) } else { None };
-        let new_user = user_repo.upsert(user, admin_update).await?;
+        let new_user = user_repo
+            .upsert(UpsertUserParam {
+                discord_id: user.id.get().to_string(),
+                name: user.name,
+                is_admin: admin_update,
+            })
+            .await?;
 
         if set_admin {
             tracing::info!("User {} has been set as admin", new_user.name)

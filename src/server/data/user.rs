@@ -4,15 +4,13 @@
 //! It handles user creation, updates, queries, and admin status management with proper
 //! conversion between entity models and parameter models at the infrastructure boundary.
 
+use crate::server::model::user::{UpsertUserParam, UserParam};
 use chrono::Utc;
 use migration::OnConflict;
 use sea_orm::{
     ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder,
 };
-use serenity::all::User as DiscordUser;
-
-use crate::server::model::user::{UpsertUserParam, UserParam};
 
 /// Repository providing database operations for user management.
 ///
@@ -34,56 +32,11 @@ impl<'a> UserRepository<'a> {
         Self { db }
     }
 
-    /// Upserts a user from Discord authentication data.
+    /// Upserts a user from parameter model.
     ///
     /// Inserts a new user or updates an existing user's name and optionally their admin status.
     /// The admin status is only updated if explicitly provided (Some value), preventing
     /// accidental removal of admin privileges during regular login operations.
-    ///
-    /// # Arguments
-    /// - `user`: Discord user data from authentication
-    /// - `is_admin`: Optional admin status (None preserves existing admin status)
-    ///
-    /// # Returns
-    /// - `Ok(UserParam)`: The created or updated user
-    /// - `Err(DbErr)`: Database error during insert or update
-    pub async fn upsert(
-        &self,
-        user: DiscordUser,
-        is_admin: Option<bool>,
-    ) -> Result<UserParam, DbErr> {
-        // Build list of columns to update on conflict
-        let mut update_columns = vec![entity::user::Column::Name];
-
-        // Only update admin column if is_admin is Some
-        if is_admin.is_some() {
-            update_columns.push(entity::user::Column::Admin);
-        }
-
-        let entity = entity::prelude::User::insert(entity::user::ActiveModel {
-            discord_id: ActiveValue::Set(user.id.get().to_string()),
-            name: ActiveValue::Set(user.name),
-            admin: ActiveValue::Set(is_admin.unwrap_or(false)),
-            ..Default::default()
-        })
-        // Update user name in case it may have changed since last login
-        // Only update admin if is_admin is Some to prevent resetting admin status
-        .on_conflict(
-            OnConflict::column(entity::user::Column::DiscordId)
-                .update_columns(update_columns)
-                .to_owned(),
-        )
-        .exec_with_returning(self.db)
-        .await?;
-
-        Ok(UserParam::from_entity(entity))
-    }
-
-    /// Upserts a user from parameter model.
-    ///
-    /// Inserts a new user or updates an existing user's name and optionally their admin status.
-    /// Similar to the Discord user upsert but accepts structured parameters instead of raw
-    /// Discord API data.
     ///
     /// # Arguments
     /// - `param`: User upsert parameters including discord_id, name, and optional admin status
@@ -91,7 +44,7 @@ impl<'a> UserRepository<'a> {
     /// # Returns
     /// - `Ok(UserParam)`: The created or updated user
     /// - `Err(DbErr)`: Database error during insert or update
-    pub async fn upsert_from_param(&self, param: UpsertUserParam) -> Result<UserParam, DbErr> {
+    pub async fn upsert(&self, param: UpsertUserParam) -> Result<UserParam, DbErr> {
         // Build list of columns to update on conflict
         let mut update_columns = vec![entity::user::Column::Name];
 
