@@ -15,6 +15,7 @@ use crate::server::{
         fleet_message::FleetMessageRepository,
     },
     error::AppError,
+    model::fleet_message::{CreateFleetMessageParam, FleetMessageParam},
 };
 
 pub struct FleetNotificationService<'a> {
@@ -560,7 +561,7 @@ impl<'a> FleetNotificationService<'a> {
         _title: Option<&str>, // Deprecated - title is now built from category name and message type
         color: u32,
         message_type: &str,
-        reference_messages: Option<Vec<entity::fleet_message::Model>>,
+        reference_messages: Option<Vec<FleetMessageParam>>,
     ) -> Result<(), AppError> {
         // Don't post if fleet is hidden (for creation messages)
         if message_type == "creation" && fleet.hidden {
@@ -674,7 +675,12 @@ impl<'a> FleetNotificationService<'a> {
                 Ok(msg) => {
                     // Store message in database
                     message_repo
-                        .create(fleet.id, channel_id_u64, msg.id.get(), message_type)
+                        .create(CreateFleetMessageParam {
+                            fleet_id: fleet.id,
+                            channel_id: channel_id_u64,
+                            message_id: msg.id.get(),
+                            message_type: message_type.to_string(),
+                        })
                         .await?;
                 }
                 Err(e) => {
