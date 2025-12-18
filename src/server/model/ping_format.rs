@@ -158,3 +158,144 @@ pub struct UpdatePingFormatFieldParam {
     /// New default value for the field.
     pub default_value: Option<String>,
 }
+
+/// Complete ping format with fields and usage metadata.
+///
+/// Combines the ping format with its fields and information about which
+/// fleet categories are using this format. Used for service layer operations
+/// that need the complete format data.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PingFormatWithFields {
+    /// The ping format.
+    pub ping_format: PingFormat,
+    /// Fields belonging to this ping format.
+    pub fields: Vec<PingFormatField>,
+    /// Number of fleet categories using this format.
+    pub fleet_category_count: u64,
+    /// Names of fleet categories using this format.
+    pub fleet_category_names: Vec<String>,
+}
+
+impl PingFormatWithFields {
+    /// Converts the complete ping format to a DTO for API responses.
+    ///
+    /// Parses the stored String guild_id into u64 for the DTO. If parsing fails,
+    /// returns an error.
+    ///
+    /// # Returns
+    /// - `Ok(PingFormatDto)` - Successfully converted DTO
+    /// - `Err(String)` - Failed to parse guild_id
+    pub fn into_dto(self) -> Result<crate::model::ping_format::PingFormatDto, String> {
+        let guild_id = self
+            .ping_format
+            .guild_id
+            .parse::<u64>()
+            .map_err(|e| format!("Failed to parse guild_id: {}", e))?;
+
+        let field_dtos = self.fields.into_iter().map(|f| f.into_dto()).collect();
+
+        Ok(crate::model::ping_format::PingFormatDto {
+            id: self.ping_format.id,
+            guild_id,
+            name: self.ping_format.name,
+            fields: field_dtos,
+            fleet_category_count: self.fleet_category_count,
+            fleet_category_names: self.fleet_category_names,
+        })
+    }
+}
+
+/// Paginated collection of ping formats with metadata.
+///
+/// Contains a page of ping formats along with pagination metadata for building
+/// paginated ping format management interfaces.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaginatedPingFormats {
+    /// Ping formats for this page.
+    pub ping_formats: Vec<PingFormatWithFields>,
+    /// Total number of ping formats across all pages.
+    pub total: u64,
+    /// Current page number (zero-indexed).
+    pub page: u64,
+    /// Number of ping formats per page.
+    pub per_page: u64,
+    /// Total number of pages.
+    pub total_pages: u64,
+}
+
+impl PaginatedPingFormats {
+    /// Converts the paginated ping formats to a DTO for API responses.
+    ///
+    /// Converts each ping format in the collection to a DTO. If any conversion fails,
+    /// returns an error immediately without processing remaining formats.
+    ///
+    /// # Returns
+    /// - `Ok(PaginatedPingFormatsDto)` - Successfully converted all formats
+    /// - `Err(String)` - Failed to parse guild_id for at least one format
+    pub fn into_dto(self) -> Result<crate::model::ping_format::PaginatedPingFormatsDto, String> {
+        let ping_formats = self
+            .ping_formats
+            .into_iter()
+            .map(|pf| pf.into_dto())
+            .collect::<Result<Vec<_>, String>>()?;
+
+        Ok(crate::model::ping_format::PaginatedPingFormatsDto {
+            ping_formats,
+            total: self.total,
+            page: self.page,
+            per_page: self.per_page,
+            total_pages: self.total_pages,
+        })
+    }
+}
+
+/// Parameters for creating a ping format with fields.
+///
+/// Contains all data needed to create a new ping format along with its fields
+/// in a single operation.
+#[derive(Debug, Clone)]
+pub struct CreatePingFormatWithFieldsParam {
+    /// Discord guild ID.
+    pub guild_id: u64,
+    /// Name of the ping format.
+    pub name: String,
+    /// Fields to create (name, priority, default_value).
+    pub fields: Vec<(String, i32, Option<String>)>,
+}
+
+/// Parameters for updating a ping format with fields.
+///
+/// Contains all data needed to update a ping format along with its fields.
+/// Fields with an id will be updated, fields without an id will be created,
+/// and existing fields not in the list will be deleted.
+#[derive(Debug, Clone)]
+pub struct UpdatePingFormatWithFieldsParam {
+    /// ID of the ping format to update.
+    pub id: i32,
+    /// Discord guild ID for verification.
+    pub guild_id: u64,
+    /// New name for the ping format.
+    pub name: String,
+    /// Fields to update/create (id, name, priority, default_value) - id is None for new fields.
+    pub fields: Vec<(Option<i32>, String, i32, Option<String>)>,
+}
+
+/// Parameters for getting paginated ping formats.
+#[derive(Debug, Clone)]
+pub struct GetPaginatedPingFormatsParam {
+    /// Discord guild ID to filter by.
+    pub guild_id: u64,
+    /// Zero-indexed page number.
+    pub page: u64,
+    /// Number of ping formats per page.
+    pub per_page: u64,
+}
+
+/// Parameters for deleting a ping format.
+#[derive(Debug, Clone)]
+pub struct DeletePingFormatParam {
+    /// ID of the ping format to delete.
+    pub id: i32,
+    /// Discord guild ID for verification.
+    pub guild_id: u64,
+}

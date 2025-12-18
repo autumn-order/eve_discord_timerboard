@@ -12,6 +12,10 @@ use crate::{
     server::{
         error::AppError,
         middleware::auth::{AuthGuard, Permission},
+        model::ping_format::{
+            CreatePingFormatWithFieldsParam, DeletePingFormatParam, GetPaginatedPingFormatsParam,
+            UpdatePingFormatWithFieldsParam,
+        },
         service::ping_format::PingFormatService,
         state::AppState,
     },
@@ -49,9 +53,18 @@ pub async fn create_ping_format(
         .map(|f| (f.name, f.priority, f.default_value))
         .collect();
 
-    let ping_format = service.create(guild_id, payload.name, fields).await?;
+    let param = CreatePingFormatWithFieldsParam {
+        guild_id,
+        name: payload.name,
+        fields,
+    };
 
-    Ok((StatusCode::CREATED, Json(ping_format)))
+    let ping_format = service.create(param).await?;
+    let dto = ping_format.into_dto().map_err(|e| {
+        AppError::InternalError(format!("Failed to convert ping format to DTO: {}", e))
+    })?;
+
+    Ok((StatusCode::CREATED, Json(dto)))
 }
 
 /// GET /api/timerboard/{guild_id}/ping/format
@@ -68,11 +81,18 @@ pub async fn get_ping_formats(
 
     let service = PingFormatService::new(&state.db);
 
-    let ping_formats = service
-        .get_paginated(guild_id, params.page, params.entries)
-        .await?;
+    let param = GetPaginatedPingFormatsParam {
+        guild_id,
+        page: params.page,
+        per_page: params.entries,
+    };
 
-    Ok((StatusCode::OK, Json(ping_formats)))
+    let ping_formats = service.get_paginated(param).await?;
+    let dto = ping_formats.into_dto().map_err(|e| {
+        AppError::InternalError(format!("Failed to convert ping formats to DTO: {}", e))
+    })?;
+
+    Ok((StatusCode::OK, Json(dto)))
 }
 
 /// PUT /api/timerboard/{guild_id}/ping/format/{format_id}
@@ -95,12 +115,22 @@ pub async fn update_ping_format(
         .map(|f| (f.id, f.name, f.priority, f.default_value))
         .collect();
 
-    let ping_format = service
-        .update(format_id, guild_id, payload.name, fields)
-        .await?;
+    let param = UpdatePingFormatWithFieldsParam {
+        id: format_id,
+        guild_id,
+        name: payload.name,
+        fields,
+    };
+
+    let ping_format = service.update(param).await?;
 
     match ping_format {
-        Some(pf) => Ok((StatusCode::OK, Json(pf))),
+        Some(pf) => {
+            let dto = pf.into_dto().map_err(|e| {
+                AppError::InternalError(format!("Failed to convert ping format to DTO: {}", e))
+            })?;
+            Ok((StatusCode::OK, Json(dto)))
+        }
         None => Ok((
             StatusCode::NOT_FOUND,
             Json(PingFormatDto {
@@ -128,7 +158,12 @@ pub async fn delete_ping_format(
 
     let service = PingFormatService::new(&state.db);
 
-    let deleted = service.delete(format_id, guild_id).await?;
+    let param = DeletePingFormatParam {
+        id: format_id,
+        guild_id,
+    };
+
+    let deleted = service.delete(param).await?;
 
     if deleted {
         Ok(StatusCode::NO_CONTENT)
