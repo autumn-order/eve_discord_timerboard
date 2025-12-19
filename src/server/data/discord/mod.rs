@@ -10,6 +10,9 @@ pub mod guild_member;
 pub mod role;
 pub mod user_guild_role;
 
+#[cfg(test)]
+mod test;
+
 pub use channel::DiscordGuildChannelRepository;
 pub use guild::DiscordGuildRepository;
 pub use guild_member::DiscordGuildMemberRepository;
