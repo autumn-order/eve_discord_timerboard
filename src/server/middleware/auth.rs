@@ -8,9 +8,9 @@ use sea_orm::DatabaseConnection;
 use tower_sessions::Session;
 
 use crate::server::{
-    controller::auth::SESSION_AUTH_USER_ID,
     data::user::UserRepository,
     error::{auth::AuthError, AppError},
+    middleware::session::AuthSession,
     model::user::User,
 };
 
@@ -80,9 +80,10 @@ impl<'a> AuthGuard<'a> {
     /// - `Err(AuthError::AccessDenied)` - User lacks one or more required permissions
     /// - `Err(DbErr(_))` - Database error during permission checks
     pub async fn require(&self, permissions: &[Permission]) -> Result<User, AppError> {
+        let auth_session = AuthSession::new(self.session);
         let user_repo = UserRepository::new(self.db);
 
-        let Some(user_id_str) = self.session.get::<String>(SESSION_AUTH_USER_ID).await? else {
+        let Some(user_id_str) = auth_session.get_user_id().await? else {
             return Err(AuthError::UserNotInSession.into());
         };
 

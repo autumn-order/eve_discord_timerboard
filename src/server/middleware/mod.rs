@@ -6,3 +6,4 @@
 //! control across API endpoints.
 
 pub mod auth;
+pub mod session;

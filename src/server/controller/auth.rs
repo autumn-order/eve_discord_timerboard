@@ -12,17 +12,9 @@ use crate::model::{api::ErrorDto, user::UserDto};
 /// Tag for grouping auth endpoints in OpenAPI documentation
 pub static AUTH_TAG: &str = "auth";
 
-/// Session key for CSRF token
-pub static SESSION_AUTH_CSRF_TOKEN: &str = "auth:csrf_token";
-/// Session key for whether to set user as admin
-static SESSION_AUTH_SET_ADMIN: &str = "auth:set_admin";
-/// Session key for current user ID
-pub static SESSION_AUTH_USER_ID: &str = "auth:user";
-/// Session key for bot addition flow
-pub static SESSION_AUTH_ADDING_BOT: &str = "auth:adding_bot";
-
 use crate::server::{
     error::{auth::AuthError, AppError},
+    middleware::session::{AuthSession, CsrfSession, OAuthFlowSession},
     service::{auth::AuthService, user::UserService},
     state::AppState,
 };
@@ -86,6 +78,8 @@ pub async fn login(
     session: Session,
     params: Query<LoginParams>,
 ) -> Result<impl IntoResponse, AppError> {
+    let oauth_session = OAuthFlowSession::new(&session);
+    let csrf_session = CsrfSession::new(&session);
     let auth_service = AuthService::new(&state.db, &state.http_client, &state.oauth_client);
     let admin_code = &params.0.admin_code;
 
@@ -98,15 +92,13 @@ pub async fn login(
         }
 
         // Store admin code validation success in session
-        session.insert(SESSION_AUTH_SET_ADMIN, true).await?;
+        oauth_session.set_admin_flag(true).await?;
     }
 
     let (url, csrf_token) = auth_service.login_url();
 
     // Store CSRF token in session for verification during callback
-    session
-        .insert(SESSION_AUTH_CSRF_TOKEN, csrf_token.secret())
-        .await?;
+    csrf_session.set_token(csrf_token.secret().clone()).await?;
 
     Ok(Redirect::temporary(url.as_str()))
 }
@@ -151,13 +143,14 @@ pub async fn callback(
     session: Session,
     params: Query<CallbackParams>,
 ) -> Result<impl IntoResponse, AppError> {
-    validate_csrf(&session, &params.0.state).await?;
+    let csrf_session = CsrfSession::new(&session);
+    let oauth_session = OAuthFlowSession::new(&session);
+    let auth_session = AuthSession::new(&session);
+
+    validate_csrf(&csrf_session, &params.0.state).await?;
 
     // Check if this is a bot addition callback
-    let adding_bot: bool = session
-        .remove(SESSION_AUTH_ADDING_BOT)
-        .await?
-        .unwrap_or(false);
+    let adding_bot = oauth_session.take_adding_bot_flag().await?;
 
     if adding_bot {
         // Bot addition doesn't return a code for OAuth, just redirect to admin
@@ -167,15 +160,12 @@ pub async fn callback(
     let auth_service = AuthService::new(&state.db, &state.http_client, &state.oauth_client);
 
     // Check if admin code was validated in the login flow
-    let set_admin: bool = session
-        .remove(SESSION_AUTH_SET_ADMIN)
-        .await?
-        .unwrap_or(false);
+    let set_admin = oauth_session.take_admin_flag().await?;
 
     let new_user = auth_service.callback(params.0.code, set_admin).await?;
 
-    session
-        .insert(SESSION_AUTH_USER_ID, new_user.discord_id.clone())
+    auth_session
+        .set_user_id(new_user.discord_id.clone())
         .await?;
 
     Ok(Redirect::permanent("/"))
@@ -204,9 +194,11 @@ pub async fn callback(
     ),
 )]
 pub async fn logout(session: Session) -> Result<impl IntoResponse, AppError> {
+    let auth_session = AuthSession::new(&session);
+
     // Only clear session if there actually is a user in session
-    if let Some(_user_id) = session.get::<String>(SESSION_AUTH_USER_ID).await? {
-        session.clear().await;
+    if auth_session.is_authenticated().await? {
+        auth_session.clear().await;
     }
 
     Ok(Redirect::temporary("/login"))
@@ -242,9 +234,10 @@ pub async fn get_user(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
+    let auth_session = AuthSession::new(&session);
     let user_service = UserService::new(&state.db);
 
-    let Some(user_id_str) = session.get::<String>(SESSION_AUTH_USER_ID).await? else {
+    let Some(user_id_str) = auth_session.get_user_id().await? else {
         return Err(AuthError::UserNotInSession.into());
     };
 
@@ -267,8 +260,11 @@ pub async fn get_user(
     Ok((StatusCode::OK, Json(user_dto)))
 }
 
-async fn validate_csrf(session: &Session, csrf_state: &str) -> Result<(), AppError> {
-    let stored_state: Option<String> = session.remove(SESSION_AUTH_CSRF_TOKEN).await?;
+async fn validate_csrf<'a>(
+    csrf_session: &CsrfSession<'a>,
+    csrf_state: &str,
+) -> Result<(), AppError> {
+    let stored_state = csrf_session.take_token().await?;
 
     if let Some(state) = stored_state {
         if state == csrf_state {

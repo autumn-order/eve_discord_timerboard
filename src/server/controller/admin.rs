@@ -12,9 +12,11 @@ use crate::{
         user::{PaginatedUsersDto, UserDto},
     },
     server::{
-        controller::auth::{SESSION_AUTH_ADDING_BOT, SESSION_AUTH_CSRF_TOKEN},
         error::AppError,
-        middleware::auth::{AuthGuard, Permission},
+        middleware::{
+            auth::{AuthGuard, Permission},
+            session::{AuthSession, CsrfSession, OAuthFlowSession},
+        },
         model::user::{GetAllUsersParam, SetAdminParam},
         service::{admin::bot::DiscordBotService, user::UserService},
         state::AppState,
@@ -55,19 +57,20 @@ pub async fn add_bot(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
-    let auth_guard = AuthGuard::new(&state.db, &session);
+    let csrf_session = CsrfSession::new(&session);
+    let oauth_session = OAuthFlowSession::new(&session);
+    let auth_session = AuthSession::new(&session);
+    let auth_guard = AuthGuard::new(&state.db, auth_session.inner());
     let bot_service = DiscordBotService::new(&state.oauth_client);
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
 
     let (url, csrf_token) = bot_service.bot_url().await?;
 
-    session
-        .insert(SESSION_AUTH_CSRF_TOKEN, csrf_token.secret())
-        .await?;
+    csrf_session.set_token(csrf_token.secret().clone()).await?;
 
     // Set flag to indicate this is a bot addition flow
-    session.insert(SESSION_AUTH_ADDING_BOT, true).await?;
+    oauth_session.set_adding_bot_flag(true).await?;
 
     Ok(Redirect::temporary(url.as_str()))
 }
@@ -124,7 +127,8 @@ pub async fn get_all_users(
     session: Session,
     Query(query): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    let auth_guard = AuthGuard::new(&state.db, &session);
+    let auth_session = AuthSession::new(&session);
+    let auth_guard = AuthGuard::new(&state.db, auth_session.inner());
     let user_service = UserService::new(&state.db);
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
@@ -172,7 +176,8 @@ pub async fn get_all_admins(
     State(state): State<AppState>,
     session: Session,
 ) -> Result<impl IntoResponse, AppError> {
-    let auth_guard = AuthGuard::new(&state.db, &session);
+    let auth_session = AuthSession::new(&session);
+    let auth_guard = AuthGuard::new(&state.db, auth_session.inner());
     let user_service = UserService::new(&state.db);
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
@@ -224,7 +229,8 @@ pub async fn add_admin(
     session: Session,
     Path(user_id): Path<u64>,
 ) -> Result<impl IntoResponse, AppError> {
-    let auth_guard = AuthGuard::new(&state.db, &session);
+    let auth_session = AuthSession::new(&session);
+    let auth_guard = AuthGuard::new(&state.db, auth_session.inner());
     let user_service = UserService::new(&state.db);
 
     let _ = auth_guard.require(&[Permission::Admin]).await?;
@@ -278,7 +284,8 @@ pub async fn remove_admin(
     session: Session,
     Path(user_id): Path<u64>,
 ) -> Result<impl IntoResponse, AppError> {
-    let auth_guard = AuthGuard::new(&state.db, &session);
+    let auth_session = AuthSession::new(&session);
+    let auth_guard = AuthGuard::new(&state.db, auth_session.inner());
     let user_service = UserService::new(&state.db);
 
     let requester = auth_guard.require(&[Permission::Admin]).await?;
