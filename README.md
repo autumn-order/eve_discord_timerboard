@@ -194,3 +194,17 @@ Rollback all applied migrations & reapply them
 ```bash
 sea-orm-cli migrate refresh
 ```
+
+## Running Tests
+
+Run server tests using:
+
+```bash
+cargo test --features server
+```
+
+Generate a code coverage report using:
+
+```bash
+cargo llvm-cov --open --features server --ignore-filename-regex "client\/|entity\/|migration\/|test-utils\/"
+```

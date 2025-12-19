@@ -1,40 +1,5 @@
 use super::*;
 
-/// Helper function to create a Discord guild role for testing
-async fn create_guild_role(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    role_id: &str,
-) -> Result<(), DbErr> {
-    entity::discord_guild_role::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        role_id: ActiveValue::Set(role_id.to_string()),
-        name: ActiveValue::Set(format!("Role {}", role_id)),
-        color: ActiveValue::Set(String::new()),
-        position: ActiveValue::Set(0),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
-/// Helper function to create a Discord guild channel for testing
-async fn create_guild_channel(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    channel_id: &str,
-) -> Result<(), DbErr> {
-    entity::discord_guild_channel::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        channel_id: ActiveValue::Set(channel_id.to_string()),
-        name: ActiveValue::Set(format!("Channel {}", channel_id)),
-        position: ActiveValue::Set(0),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
 /// Tests deleting a category by ID.
 ///
 /// Verifies that the repository successfully deletes a category
@@ -100,8 +65,8 @@ async fn deletes_category_cascades_to_access_roles() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild roles first
-    create_guild_role(db, &guild.guild_id, "1001").await?;
-    create_guild_role(db, &guild.guild_id, "1002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1002").await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -162,9 +127,9 @@ async fn deletes_category_cascades_to_ping_roles() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild roles first
-    create_guild_role(db, &guild.guild_id, "2001").await?;
-    create_guild_role(db, &guild.guild_id, "2002").await?;
-    create_guild_role(db, &guild.guild_id, "2003").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2003").await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -212,10 +177,10 @@ async fn deletes_category_cascades_to_channels() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild channels first
-    create_guild_channel(db, &guild.guild_id, "3001").await?;
-    create_guild_channel(db, &guild.guild_id, "3002").await?;
-    create_guild_channel(db, &guild.guild_id, "3003").await?;
-    create_guild_channel(db, &guild.guild_id, "3004").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3001").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3002").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3003").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3004").await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -263,13 +228,13 @@ async fn deletes_category_with_all_related_entities() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild roles and channels first
-    create_guild_role(db, &guild.guild_id, "1001").await?;
-    create_guild_role(db, &guild.guild_id, "1002").await?;
-    create_guild_role(db, &guild.guild_id, "2001").await?;
-    create_guild_role(db, &guild.guild_id, "2002").await?;
-    create_guild_channel(db, &guild.guild_id, "3001").await?;
-    create_guild_channel(db, &guild.guild_id, "3002").await?;
-    create_guild_channel(db, &guild.guild_id, "3003").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2002").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3001").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3002").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3003").await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -371,8 +336,8 @@ async fn deletes_category_without_affecting_others() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild roles first
-    create_guild_role(db, &guild.guild_id, "2001").await?;
-    create_guild_role(db, &guild.guild_id, "2002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2002").await?;
 
     let repo = FleetCategoryRepository::new(db);
 

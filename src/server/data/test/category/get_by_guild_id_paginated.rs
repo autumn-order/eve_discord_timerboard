@@ -1,40 +1,5 @@
 use super::*;
 
-/// Helper function to create a Discord guild role for testing
-async fn create_guild_role(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    role_id: &str,
-) -> Result<(), DbErr> {
-    entity::discord_guild_role::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        role_id: ActiveValue::Set(role_id.to_string()),
-        name: ActiveValue::Set(format!("Role {}", role_id)),
-        color: ActiveValue::Set(String::new()),
-        position: ActiveValue::Set(0),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
-/// Helper function to create a Discord guild channel for testing
-async fn create_guild_channel(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    channel_id: &str,
-) -> Result<(), DbErr> {
-    entity::discord_guild_channel::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        channel_id: ActiveValue::Set(channel_id.to_string()),
-        name: ActiveValue::Set(format!("Channel {}", channel_id)),
-        position: ActiveValue::Set(0),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
 /// Tests getting paginated categories for a guild.
 ///
 /// Verifies that the repository successfully retrieves categories with
@@ -235,15 +200,15 @@ async fn returns_categories_with_counts() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create guild roles and channels first
-    create_guild_role(db, &guild.guild_id, "1001").await?;
-    create_guild_role(db, &guild.guild_id, "1002").await?;
-    create_guild_role(db, &guild.guild_id, "2001").await?;
-    create_guild_role(db, &guild.guild_id, "2002").await?;
-    create_guild_role(db, &guild.guild_id, "2003").await?;
-    create_guild_channel(db, &guild.guild_id, "3001").await?;
-    create_guild_channel(db, &guild.guild_id, "3002").await?;
-    create_guild_channel(db, &guild.guild_id, "3003").await?;
-    create_guild_channel(db, &guild.guild_id, "3004").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "1002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2002").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2003").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3001").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3002").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3003").await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3004").await?;
 
     let repo = FleetCategoryRepository::new(db);
 

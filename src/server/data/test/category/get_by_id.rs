@@ -1,42 +1,5 @@
 use super::*;
 
-/// Helper function to create a Discord guild role for testing
-async fn create_guild_role(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    role_id: &str,
-    position: i16,
-) -> Result<(), DbErr> {
-    entity::discord_guild_role::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        role_id: ActiveValue::Set(role_id.to_string()),
-        name: ActiveValue::Set(format!("Role {}", role_id)),
-        color: ActiveValue::Set(String::new()),
-        position: ActiveValue::Set(position),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
-/// Helper function to create a Discord guild channel for testing
-async fn create_guild_channel(
-    db: &DatabaseConnection,
-    guild_id: &str,
-    channel_id: &str,
-    position: i32,
-) -> Result<(), DbErr> {
-    entity::discord_guild_channel::ActiveModel {
-        guild_id: ActiveValue::Set(guild_id.to_string()),
-        channel_id: ActiveValue::Set(channel_id.to_string()),
-        name: ActiveValue::Set(format!("Channel {}", channel_id)),
-        position: ActiveValue::Set(position),
-    }
-    .insert(db)
-    .await?;
-    Ok(())
-}
-
 /// Tests getting a category by ID with all related entities.
 ///
 /// Verifies that the repository successfully retrieves a category with
@@ -56,12 +19,12 @@ async fn gets_category_with_all_relations() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create discord guild roles for foreign key constraints
-    create_guild_role(db, &guild.guild_id, "1001", 0).await?;
-    create_guild_role(db, &guild.guild_id, "2001", 0).await?;
-    create_guild_role(db, &guild.guild_id, "2002", 0).await?;
+    factory::create_guild_role(db, &guild.guild_id, "1001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2001").await?;
+    factory::create_guild_role(db, &guild.guild_id, "2002").await?;
 
     // Create discord guild channel for foreign key constraint
-    create_guild_channel(db, &guild.guild_id, "3001", 0).await?;
+    factory::create_guild_channel(db, &guild.guild_id, "3001").await?;
 
     let access_role = AccessRoleData {
         role_id: 1001,
@@ -195,8 +158,10 @@ async fn gets_category_with_enriched_roles() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create Discord guild roles
-    create_guild_role(db, &guild.guild_id, "1001", 10).await?;
-    create_guild_role(db, &guild.guild_id, "2001", 5).await?;
+    factory::create_guild_role_with_position(db, &guild.guild_id, "1001", 10)
+        .await?;
+    factory::create_guild_role_with_position(db, &guild.guild_id, "2001", 5)
+        .await?;
 
     let access_role = AccessRoleData {
         role_id: 1001,
@@ -264,8 +229,20 @@ async fn gets_category_with_enriched_channels() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create Discord guild channels
-    create_guild_channel(db, &guild.guild_id, "3001", 1).await?;
-    create_guild_channel(db, &guild.guild_id, "3002", 2).await?;
+    factory::create_guild_channel_with_position(
+        db,
+        &guild.guild_id,
+        "3001",
+        1,
+    )
+    .await?;
+    factory::create_guild_channel_with_position(
+        db,
+        &guild.guild_id,
+        "3002",
+        2,
+    )
+    .await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -324,8 +301,10 @@ async fn sorts_roles_by_position_descending() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create roles with different positions
-    create_guild_role(db, &guild.guild_id, "1001", 1).await?;
-    create_guild_role(db, &guild.guild_id, "1002", 10).await?;
+    factory::create_guild_role_with_position(db, &guild.guild_id, "1001", 1)
+        .await?;
+    factory::create_guild_role_with_position(db, &guild.guild_id, "1002", 10)
+        .await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
@@ -392,8 +371,20 @@ async fn sorts_channels_by_position_ascending() -> Result<(), DbErr> {
     let ping_format = factory::ping_format::create_ping_format(db, &guild.guild_id).await?;
 
     // Create channels with different positions
-    create_guild_channel(db, &guild.guild_id, "3001", 5).await?;
-    create_guild_channel(db, &guild.guild_id, "3002", 1).await?;
+    factory::create_guild_channel_with_position(
+        db,
+        &guild.guild_id,
+        "3001",
+        5,
+    )
+    .await?;
+    factory::create_guild_channel_with_position(
+        db,
+        &guild.guild_id,
+        "3002",
+        1,
+    )
+    .await?;
 
     let repo = FleetCategoryRepository::new(db);
     let created = repo
