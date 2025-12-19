@@ -21,8 +21,7 @@ pub async fn get_category_details(
         "/api/guilds/{}/categories/{}/details",
         guild_id, category_id
     );
-    let request = get(&url);
-    let response = send_request(request).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -30,8 +29,7 @@ pub async fn get_category_details(
 /// Get all members of a guild for FC selection
 pub async fn get_guild_members(guild_id: u64) -> Result<Vec<DiscordGuildMemberDto>, ApiError> {
     let url = format!("/api/guilds/{}/members", guild_id);
-    let request = get(&url);
-    let response = send_request(request).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -40,7 +38,7 @@ pub async fn get_guild_members(guild_id: u64) -> Result<Vec<DiscordGuildMemberDt
 pub async fn create_fleet(guild_id: u64, dto: CreateFleetDto) -> Result<FleetDto, ApiError> {
     let url = format!("/api/guilds/{}/fleets", guild_id);
     let body = serialize_json(&dto)?;
-    let response = send_request(post(&url).body(body)).await?;
+    let response = send_request(|| post(&url).body(body.clone())).await?;
     parse_response(response).await
 }
 
@@ -55,8 +53,7 @@ pub async fn get_fleets(
         "/api/guilds/{}/fleets?page={}&per_page={}",
         guild_id, page, per_page
     );
-    let request = get(&url);
-    let response = send_request(request).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -64,8 +61,7 @@ pub async fn get_fleets(
 /// Get fleet details by ID
 pub async fn get_fleet(guild_id: u64, fleet_id: i32) -> Result<FleetDto, ApiError> {
     let url = format!("/api/guilds/{}/fleets/{}", guild_id, fleet_id);
-    let request = get(&url);
-    let response = send_request(request).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -78,7 +74,7 @@ pub async fn update_fleet(
 ) -> Result<FleetDto, ApiError> {
     let url = format!("/api/guilds/{}/fleets/{}", guild_id, fleet_id);
     let body = serialize_json(&dto)?;
-    let response = send_request(put(&url).body(body)).await?;
+    let response = send_request(|| put(&url).body(body.clone())).await?;
     parse_response(response).await
 }
 
@@ -86,6 +82,6 @@ pub async fn update_fleet(
 /// Delete a fleet
 pub async fn delete_fleet(guild_id: u64, fleet_id: i32) -> Result<(), ApiError> {
     let url = format!("/api/guilds/{}/fleets/{}", guild_id, fleet_id);
-    let response = send_request(delete(&url)).await?;
+    let response = send_request(|| delete(&url)).await?;
     parse_empty_response(response).await
 }

@@ -16,7 +16,7 @@ pub async fn get_discord_guild_roles(
         guild_id, page, per_page
     );
 
-    let response = send_request(get(&url)).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -31,6 +31,6 @@ pub async fn get_discord_guild_channels(
         guild_id, page, per_page
     );
 
-    let response = send_request(get(&url)).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }

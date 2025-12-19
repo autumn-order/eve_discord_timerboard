@@ -21,7 +21,7 @@ pub async fn get_ping_formats(
         guild_id, page, per_page
     );
 
-    let response = send_request(get(&url)).await?;
+    let response = send_request(|| get(&url)).await?;
     parse_response(response).await
 }
 
@@ -45,7 +45,7 @@ pub async fn create_ping_format(
     };
     let body = serialize_json(&payload)?;
 
-    let response = send_request(post(&url).body(body)).await?;
+    let response = send_request(|| post(&url).body(body.clone())).await?;
     parse_empty_response(response).await
 }
 
@@ -73,7 +73,7 @@ pub async fn update_ping_format(
     };
     let body = serialize_json(&payload)?;
 
-    let response = send_request(put(&url).body(body)).await?;
+    let response = send_request(|| put(&url).body(body.clone())).await?;
     parse_empty_response(response).await
 }
 
@@ -81,6 +81,6 @@ pub async fn update_ping_format(
 pub async fn delete_ping_format(guild_id: u64, format_id: i32) -> Result<(), ApiError> {
     let url = format!("/api/admin/servers/{}/formats/{}", guild_id, format_id);
 
-    let response = send_request(delete(&url)).await?;
+    let response = send_request(|| delete(&url)).await?;
     parse_empty_response(response).await
 }

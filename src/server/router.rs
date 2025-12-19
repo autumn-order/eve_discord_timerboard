@@ -8,6 +8,9 @@ use axum::{
     http::{header, HeaderValue, Method},
     Router,
 };
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -40,6 +43,10 @@ use crate::{
 /// Configures CORS based on the allowed origins from the application config.
 /// CORS is applied to all API routes with credentials support enabled for
 /// session-based authentication.
+///
+/// Configures rate limiting using tower-governor with IP-based key extraction.
+/// Rate limits are set to 100 requests per minute per IP address to prevent abuse.
+/// The rate limiter uses a GCRA (Generic Cell Rate Algorithm) for smooth rate limiting.
 ///
 /// Constructs an Axum router with all authentication, user management, admin, fleet, category,
 /// and discord endpoints registered. Each endpoint is annotated with OpenAPI specifications via
@@ -108,12 +115,20 @@ use crate::{
 /// - Test endpoints directly from the browser
 /// - Download the OpenAPI specification
 ///
+/// # Rate Limiting
+/// Rate limiting is configured globally for all routes:
+/// - **10 requests per second** per IP address
+/// - **Burst of 20** allows brief spikes in traffic
+/// - Uses `SmartIpKeyExtractor` to handle X-Forwarded-For and X-Real-IP headers
+/// - Returns 429 Too Many Requests when limit is exceeded
+/// - Response headers include rate limit information (X-RateLimit-*)
+///
 /// # Arguments
 /// - `config` - Application configuration containing CORS origins
 ///
 /// # Returns
-/// - `Ok(Router<AppState>)` - Configured router with CORS layer applied
-/// - `Err(AppError::InternalError)` - If app_url fails to parse
+/// - `Ok(Router<AppState>)` - Configured router with CORS and rate limiting layers applied
+/// - `Err(AppError::InternalError)` - If app_url fails to parse or rate limiter configuration fails
 pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
     #[derive(OpenApi)]
     #[openapi(
@@ -265,5 +280,17 @@ pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
         ])
         .allow_credentials(true); // Required for session cookies
 
-    Ok(api_router.layer(cors))
+    // Configure rate limiting: 10 requests per second per IP with burst of 20
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(20)
+        .burst_size(50)
+        .key_extractor(SmartIpKeyExtractor)
+        .use_headers()
+        .finish()
+        .unwrap();
+
+    // Apply rate limiting and CORS layers to all routes
+    Ok(api_router
+        .layer(GovernorLayer::new(governor_conf))
+        .layer(cors))
 }
