@@ -848,9 +848,115 @@ async fn fails_for_nonexistent_main_character() -> Result<(), AppError> {
 
 ---
 
-## Test Factories
+## Test Factories vs Fixtures
 
-To reduce boilerplate and improve test maintainability, we use factory methods from the `test-utils` crate for creating test entities with sensible defaults.
+To reduce boilerplate and improve test maintainability, we use both factories and fixtures from the `test-utils` crate. Understanding when to use each is critical for effective testing.
+
+### Factories
+
+**Factories INSERT data into the database.** They create and persist entities using SeaORM's `.insert()` method, returning the created `entity::*::Model` from the database.
+
+**Use factories when:**
+- Testing repository/data layer (needs real DB operations)
+- Integration tests requiring persisted data
+- Testing database constraints (foreign keys, unique indexes)
+- Testing relationships between entities
+- You need the entity to exist in the database for subsequent operations
+
+**Location**: `test-utils/src/factory/{domain}.rs`
+
+**Example**:
+```rust
+// Inserts into database and returns persisted entity
+let user = factory::create_user(db).await?;
+let admin = factory::UserFactory::new(db)
+    .admin(true)
+    .build()
+    .await?;
+```
+
+### Fixtures
+
+**Fixtures do NOT insert into the database.** They create in-memory test data structures without persistence, useful for mocking and unit testing for objects that don't need database persistence.
+
+**Use fixtures when:**
+- Unit testing services with mocked repositories
+- Testing serialization/deserialization of DTOs
+- Testing business logic without database
+- Mocking external API responses
+- You need test data but don't want database side effects
+
+**Location**: `test-utils/src/fixture/{domain}.rs`
+
+**Example**:
+```rust
+// Returns entity model without database insertion
+let user_entity = fixture::user_entity();
+
+// Returns domain model for service testing
+let user_domain = fixture::user_domain();
+
+// Returns DTO for API testing
+let user_dto = fixture::user_dto();
+```
+
+**Common fixture patterns**:
+```rust
+// test-utils/src/fixture/user.rs
+
+/// Creates a user entity model without database insertion
+pub fn user_entity() -> entity::user::Model {
+    entity::user::Model {
+        discord_id: "123456789".to_string(),
+        name: "Test User".to_string(),
+        admin: false,
+        last_guild_sync_at: Utc::now(),
+        last_role_sync_at: Utc::now(),
+    }
+}
+
+/// Creates a user domain model for service testing
+pub fn user_domain() -> User {
+    User {
+        discord_id: "123456789".to_string(),
+        name: "Test User".to_string(),
+        admin: false,
+        last_guild_sync_at: Utc::now(),
+        last_role_sync_at: Utc::now(),
+    }
+}
+
+/// Creates a user DTO for API testing
+pub fn user_dto() -> UserDto {
+    UserDto {
+        discord_id: "123456789".to_string(),
+        name: "Test User".to_string(),
+        admin: false,
+    }
+}
+
+/// Creates customizable user entity with builder
+pub fn user_entity_builder() -> UserEntityBuilder {
+    UserEntityBuilder::default()
+}
+```
+
+### Quick Reference
+
+| Aspect | Factory | Fixture |
+|--------|---------|---------|
+| **Database** | ✅ Inserts into DB | ❌ No DB interaction |
+| **Returns** | Persisted entity | In-memory struct |
+| **Use for** | Integration tests, data layer | Unit tests, mocking |
+| **Performance** | Slower (DB I/O) | Faster (pure memory) |
+| **Dependencies** | Requires DB connection | No dependencies |
+| **Example** | `factory::create_user(db)` | `fixture::user_entity()` |
+
+---
+
+## Factory Usage
+
+Factories provide builder patterns and convenience methods for creating test entities with sensible defaults.
 
 ### Factory Usage
 
@@ -931,19 +1037,35 @@ let test = TestBuilder::new()
 
 ### Available Factories
 
-- `factory::user` - Create user entities
-- `factory::discord_guild` - Create Discord guild entities  
-- `factory::ping_format` - Create ping format entities
-- `factory::fleet_category` - Create fleet category entities
-- `factory::fleet` - Create fleet entities
+- `factory::user` - Create and insert user entities
+- `factory::discord_guild` - Create and insert Discord guild entities  
+- `factory::ping_format` - Create and insert ping format entities
+- `factory::fleet_category` - Create and insert fleet category entities
+- `factory::fleet` - Create and insert fleet entities
 - `factory::helpers` - Composite creation methods for entity hierarchies
+
+### Available Fixtures
+
+- `fixture::user` - In-memory user models (entity, domain, DTO)
+- `fixture::character` - In-memory character models
+- `fixture::timer` - In-memory timer models
+- Additional fixtures created as needed per domain
 
 ### Benefits
 
-- **Reduced boilerplate**: Tests focus on behavior, not setup
+**Factories**:
+- **Reduced boilerplate**: Tests focus on behavior, not DB setup
 - **Maintainability**: Entity structure changes only require factory updates
-- **Consistency**: All tests use the same entity creation patterns
+- **Consistency**: All integration tests use the same entity creation patterns
 - **Readability**: Clear intent with descriptive factory methods
+- **Realistic testing**: Tests actual database constraints and relationships
+
+**Fixtures**:
+- **Speed**: No database overhead for unit tests
+- **Isolation**: Pure unit testing without external dependencies
+- **Flexibility**: Easy to customize test data without DB constraints
+- **Predictability**: Same data every time, no DB state issues
+- **Portability**: Tests run without database setup
 
 ---
 
