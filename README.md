@@ -206,5 +206,5 @@ cargo test --features server
 Generate a code coverage report using:
 
 ```bash
-cargo llvm-cov --open --features server --ignore-filename-regex "client\/|entity\/|migration\/|test-utils\/"
+cargo llvm-cov --open --features server --ignore-filename-regex "client\/|entity\/|migration\/|test-utils\/|test\/"
 ```

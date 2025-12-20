@@ -7,3 +7,6 @@
 
 pub mod auth;
 pub mod session;
+
+#[cfg(test)]
+mod test;
