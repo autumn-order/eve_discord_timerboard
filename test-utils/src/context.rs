@@ -55,7 +55,9 @@ impl TestContext {
             None => {
                 let db = Database::connect("sqlite::memory:").await?;
 
-                Ok(self.db.insert(db))
+                let db_ref = self.db.insert(db);
+
+                Ok(&*db_ref) // Re-borrow as immutable
             }
         }
     }
@@ -133,7 +135,9 @@ impl TestContext {
                     Some(Expiry::OnInactivity(Duration::days(7))),
                 );
 
-                Ok(self.session.insert(session))
+                let session_ref = self.session.insert(session);
+
+                Ok(&*session_ref) // Re-borrow as immutable
             }
         }
     }
