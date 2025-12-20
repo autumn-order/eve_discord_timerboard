@@ -1,7 +1,7 @@
 use crate::server::data::discord::guild::DiscordGuildRepository;
 use chrono::Utc;
 use sea_orm::{ColumnTrait, DbErr, EntityTrait, QueryFilter};
-use test_utils::{builder::TestBuilder, factory, serenity::create_test_guild};
+use test_utils::{builder::TestBuilder, factory, mock::serenity::create_test_guild};
 
 mod find_by_guild_id;
 mod get_all;

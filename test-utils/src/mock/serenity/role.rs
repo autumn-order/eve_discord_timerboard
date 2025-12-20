@@ -1,7 +1,7 @@
-//! Test factory for creating Serenity Role objects.
+//! Mock builder for creating Serenity Role objects.
 //!
-//! This module provides factory functions for creating mock Serenity `Role` structs
-//! for testing purposes. These factories create valid Role objects by deserializing
+//! This module provides mock builder functions for creating Serenity `Role` structs
+//! for testing purposes. These mocks create valid Role objects by deserializing
 //! JSON, simulating what Discord's API would return.
 
 use serenity::all::Role;
@@ -27,7 +27,7 @@ use serenity::all::Role;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use test_utils::serenity::role::create_test_role;
+/// use test_utils::mock::serenity::create_test_role;
 ///
 /// // Create basic role
 /// let role = create_test_role(123456789, "Admin", 0xFF0000, 10);

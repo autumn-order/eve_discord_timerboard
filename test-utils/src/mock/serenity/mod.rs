@@ -1,21 +1,21 @@
-//! Test factories for creating Serenity API objects.
+//! Mock builders for creating Serenity API objects.
 //!
-//! This module provides factory functions for creating mock Serenity structs
-//! (Guild, Role, Channel, etc.) for testing purposes. These factories create
+//! This module provides mock builders for creating Serenity structs
+//! (Guild, Role, Channel, etc.) for testing purposes. These mocks create
 //! valid Serenity objects by deserializing JSON, simulating what Discord's API
 //! would return.
 //!
 //! # Overview
 //!
 //! When testing code that interacts with Discord's API via Serenity, you often
-//! need to create mock Serenity structs. These factories provide a consistent
+//! need to create mock Serenity structs. These mock builders provide a consistent
 //! way to create these objects with sensible defaults while allowing customization
 //! of key fields.
 //!
 //! # Usage
 //!
 //! ```rust,ignore
-//! use test_utils::serenity::{guild::create_test_guild, role::create_test_role};
+//! use test_utils::mock::serenity::{create_test_guild, create_test_role};
 //!
 //! #[tokio::test]
 //! async fn test_guild_sync() {
@@ -30,7 +30,7 @@
 //! }
 //! ```
 //!
-//! # Available Factories
+//! # Available Mocks
 //!
 //! - `guild::create_test_guild` - Create Serenity Guild objects
 //! - `role::create_test_role` - Create Serenity Role objects

@@ -1,7 +1,7 @@
-//! Test factory for creating Serenity Guild objects.
+//! Mock builder for creating Serenity Guild objects.
 //!
-//! This module provides factory functions for creating mock Serenity `Guild` structs
-//! for testing purposes. These factories create valid Guild objects by deserializing
+//! This module provides mock builder functions for creating Serenity `Guild` structs
+//! for testing purposes. These mocks create valid Guild objects by deserializing
 //! JSON, simulating what Discord's API would return.
 
 use serenity::all::Guild;
@@ -26,7 +26,7 @@ use serenity::all::Guild;
 /// # Examples
 ///
 /// ```rust,ignore
-/// use test_utils::serenity::guild::create_test_guild;
+/// use test_utils::mock::serenity::create_test_guild;
 ///
 /// // Create guild without icon
 /// let guild = create_test_guild(123456789, "Test Guild", None);

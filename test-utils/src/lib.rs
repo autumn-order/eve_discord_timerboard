@@ -38,4 +38,4 @@ pub mod context;
 pub mod error;
 pub mod factory;
 pub mod fixture;
-pub mod serenity;
+pub mod mock;
