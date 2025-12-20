@@ -27,6 +27,7 @@
 
 pub mod discord_guild;
 pub mod discord_guild_channel;
+pub mod discord_guild_member;
 pub mod discord_guild_role;
 pub mod fleet;
 pub mod fleet_category;
@@ -40,6 +41,9 @@ pub use discord_guild::{
 };
 pub use discord_guild_channel::{
     entity as discord_guild_channel_entity, entity_builder as discord_guild_channel_entity_builder,
+};
+pub use discord_guild_member::{
+    entity as discord_guild_member_entity, entity_builder as discord_guild_member_entity_builder,
 };
 pub use discord_guild_role::{
     entity as discord_guild_role_entity, entity_builder as discord_guild_role_entity_builder,
