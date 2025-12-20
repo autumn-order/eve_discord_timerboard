@@ -112,10 +112,10 @@ impl<'a> AuthGuard<'a> {
                     }
 
                     // Check if user has view access to this category
-                    use crate::server::data::category::FleetCategoryRepository;
-                    let category_repo = FleetCategoryRepository::new(self.db);
+                    use crate::server::data::user_category_permission::UserCategoryPermissionRepository;
+                    let permission_repo = UserCategoryPermissionRepository::new(self.db);
 
-                    let has_access = category_repo
+                    let has_access = permission_repo
                         .user_can_view_category(user_id, *guild_id, *category_id)
                         .await?;
 
@@ -137,10 +137,10 @@ impl<'a> AuthGuard<'a> {
                     }
 
                     // Check if user has create access to this category
-                    use crate::server::data::category::FleetCategoryRepository;
-                    let category_repo = FleetCategoryRepository::new(self.db);
+                    use crate::server::data::user_category_permission::UserCategoryPermissionRepository;
+                    let permission_repo = UserCategoryPermissionRepository::new(self.db);
 
-                    let has_access = category_repo
+                    let has_access = permission_repo
                         .user_can_create_category(user_id, *guild_id, *category_id)
                         .await?;
 

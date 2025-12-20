@@ -1,7 +1,10 @@
 use sea_orm::DatabaseConnection;
 
 use crate::server::{
-    data::category::FleetCategoryRepository,
+    data::{
+        category::FleetCategoryRepository,
+        user_category_permission::UserCategoryPermissionRepository,
+    },
     error::AppError,
     model::category::{
         CreateFleetCategoryParams, FleetCategory, FleetCategoryListItem, PaginatedFleetCategories,
@@ -255,7 +258,10 @@ impl<'a> FleetCategoryService<'a> {
                 .collect::<Result<Vec<_>, _>>()?
         } else {
             // Regular users get only categories they can manage
-            repo.get_manageable_by_user(user_id, guild_id).await?
+            let permission_repo = UserCategoryPermissionRepository::new(self.db);
+            permission_repo
+                .get_manageable_by_user(user_id, guild_id)
+                .await?
         };
 
         Ok(categories)

@@ -16,7 +16,10 @@ use crate::{
         fleet::{CreateFleetDto, FleetDto, PaginatedFleetsDto, UpdateFleetDto},
     },
     server::{
-        data::category::FleetCategoryRepository,
+        data::{
+            category::FleetCategoryRepository,
+            user_category_permission::UserCategoryPermissionRepository,
+        },
         error::{auth::AuthError, AppError},
         middleware::auth::{AuthGuard, Permission},
         service::fleet::FleetService,
@@ -495,8 +498,8 @@ pub async fn update_fleet(
     let can_manage = if user.admin || user_id == fleet.commander_id {
         true
     } else {
-        let category_repo = FleetCategoryRepository::new(&state.db);
-        category_repo
+        let permission_repo = UserCategoryPermissionRepository::new(&state.db);
+        permission_repo
             .user_can_manage_category(user_id, guild_id, fleet.category_id)
             .await?
     };
@@ -584,8 +587,8 @@ pub async fn delete_fleet(
     let can_manage = if user.admin || user_id == fleet.commander_id {
         true
     } else {
-        let category_repo = FleetCategoryRepository::new(&state.db);
-        category_repo
+        let permission_repo = UserCategoryPermissionRepository::new(&state.db);
+        permission_repo
             .user_can_manage_category(user_id, guild_id, fleet.category_id)
             .await?
     };

@@ -21,7 +21,9 @@ use crate::{
         CreateFleetDto, FleetDto, FleetListItemDto, PaginatedFleetsDto, UpdateFleetDto,
     },
     server::{
-        data::{category::FleetCategoryRepository, fleet::FleetRepository},
+        data::{
+            fleet::FleetRepository, user_category_permission::UserCategoryPermissionRepository,
+        },
         error::AppError,
         model::fleet::{CreateFleetParams, GetPaginatedFleetsByGuildParam, UpdateFleetParams},
         service::fleet_notification::FleetNotificationService,
@@ -138,7 +140,6 @@ impl<'a> FleetService<'a> {
         is_admin: bool,
     ) -> Result<Option<FleetDto>, AppError> {
         let repo = FleetRepository::new(self.db);
-        let category_repo = FleetCategoryRepository::new(self.db);
 
         let result = repo.get_by_id(id).await?;
 
@@ -151,13 +152,14 @@ impl<'a> FleetService<'a> {
 
             // Check if user has any permission to view this category (view, create, or manage)
             if !is_admin {
-                let can_view = category_repo
+                let permission_repo = UserCategoryPermissionRepository::new(self.db);
+                let can_view = permission_repo
                     .user_can_view_category(user_id, guild_id, fleet.category_id)
                     .await?;
-                let can_create = category_repo
+                let can_create = permission_repo
                     .user_can_create_category(user_id, guild_id, fleet.category_id)
                     .await?;
-                let can_manage = category_repo
+                let can_manage = permission_repo
                     .user_can_manage_category(user_id, guild_id, fleet.category_id)
                     .await?;
 
@@ -270,14 +272,14 @@ impl<'a> FleetService<'a> {
         params: GetPaginatedFleetsByGuildParam,
     ) -> Result<PaginatedFleetsDto, AppError> {
         let repo = FleetRepository::new(self.db);
-        let category_repo = FleetCategoryRepository::new(self.db);
+        let permission_repo = UserCategoryPermissionRepository::new(self.db);
 
         // Get viewable category IDs for non-admin users
         let viewable_category_ids = if params.is_admin {
             None // Admins can view all categories
         } else {
             Some(
-                category_repo
+                permission_repo
                     .get_viewable_category_ids_by_user(params.user_id, params.guild_id)
                     .await?,
             )
@@ -287,10 +289,10 @@ impl<'a> FleetService<'a> {
         let manageable_category_ids = if params.is_admin {
             None // Admins can see all hidden fleets
         } else {
-            let create_ids = category_repo
+            let create_ids = permission_repo
                 .get_creatable_category_ids_by_user(params.user_id, params.guild_id)
                 .await?;
-            let manage_ids = category_repo
+            let manage_ids = permission_repo
                 .get_manageable_category_ids_by_user(params.user_id, params.guild_id)
                 .await?;
 
