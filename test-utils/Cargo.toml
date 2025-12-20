@@ -19,6 +19,9 @@ sea-orm = { workspace = true, features = [
 serde_json = { workspace = true }
 serenity = { workspace = true }
 thiserror = { workspace = true }
+time = { workspace = true }
+tower-sessions = { workspace = true }
+tower-sessions-sqlx-store = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["macros", "rt"] }

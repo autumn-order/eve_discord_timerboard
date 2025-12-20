@@ -13,6 +13,9 @@ sea-orm = { version = "2.0.0-rc.11" }
 serde_json = { version = "1.0.145" }
 serenity = { version = "0.12.4" }
 thiserror = { version = "2.0.17" }
+time = { version = "0.3.44" }
+tower-sessions = { version = "0.14.0" }
+tower-sessions-sqlx-store = { version = "0.15.0", features = ["sqlite"] }
 
 [dependencies]
 axum = { version = "0.8.6", optional = true }
@@ -43,13 +46,13 @@ serde_json = { workspace = true, optional = true }
 serenity = { workspace = true, optional = true }
 test-utils = { path = "test-utils", optional = true }
 thiserror = { workspace = true, optional = true }
-time = { version = "0.3.44", optional = true }
+time = { workspace = true, optional = true }
 tokio = { version = "1.48.0", optional = true }
 tokio-cron-scheduler = { version = "0.15.1", optional = true }
 tower_governor = { version = "0.8.0", optional = true }
 tower-http = { version = "0.6.8", features = ["cors"], optional = true }
-tower-sessions = { version = "0.14.0", optional = true }
-tower-sessions-sqlx-store = { version = "0.15.0", features = ["sqlite"], optional = true }
+tower-sessions = { workspace = true, optional = true }
+tower-sessions-sqlx-store = { workspace = true, optional = true }
 url = { version = "2.5.7", optional = true }
 utoipa = { version = "5.4.0", features = ["axum_extras", "chrono"], optional = true }
 utoipa-axum = { version = "0.2.0", optional = true }

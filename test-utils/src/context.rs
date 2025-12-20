@@ -1,18 +1,28 @@
 use sea_orm::{sea_query::TableCreateStatement, ConnectionTrait, Database, DatabaseConnection};
+use std::sync::Arc;
+use time::Duration;
+use tower_sessions::{Expiry, Session};
+use tower_sessions_sqlx_store::SqliteStore;
 
 use crate::error::TestError;
 
-/// Test context containing database connection and test environment setup.
+/// Test context containing database connection, session, and test environment setup.
 ///
-/// Provides an in-memory SQLite database connection for isolated unit and integration
-/// testing. The database is created lazily on first access and persists for the lifetime
-/// of the test context.
+/// Provides an in-memory SQLite database connection and session for isolated
+/// unit and integration testing. Both the database and session are created lazily on first
+/// access and persist for the lifetime of the test context.
 pub struct TestContext {
     /// Optional database connection to in-memory SQLite instance.
     ///
     /// Initialized lazily when `database()` is first called. Using `Option` allows
     /// deferred connection until actually needed by the test.
     pub db: Option<DatabaseConnection>,
+
+    /// Optional session instance for session handling.
+    ///
+    /// Initialized lazily when `session()` is first called. Uses the same
+    /// in-memory SQLite database as `db` for session storage.
+    pub session: Option<Session>,
 }
 
 impl TestContext {
@@ -24,7 +34,10 @@ impl TestContext {
     /// # Returns
     /// - New `TestContext` instance with no database connection
     pub fn new() -> Self {
-        Self { db: None }
+        Self {
+            db: None,
+            session: None,
+        }
     }
 
     /// Gets or creates the in-memory SQLite database connection.
@@ -68,5 +81,60 @@ impl TestContext {
         }
 
         Ok(())
+    }
+
+    /// Gets or creates the test session instance.
+    ///
+    /// Returns a reference to the existing session if one exists, otherwise
+    /// creates a new session backed by the in-memory SQLite database. The session
+    /// persists for the lifetime of this test context.
+    ///
+    /// On first call, this method will:
+    /// 1. Initialize the database connection if not already done
+    /// 2. Create and migrate the session store table
+    /// 3. Create a new session instance
+    ///
+    /// Subsequent calls return the same session instance.
+    ///
+    /// # Returns
+    /// - `Ok(&Session)` - Reference to the session instance
+    /// - `Err(TestError::Database)` - Failed to initialize database connection or session table
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let mut test = TestContext::new();
+    /// let session = test.session().await?;
+    ///
+    /// // Use session in tests
+    /// session.insert("user_id", 123).await?;
+    /// ```
+    pub async fn session(&mut self) -> Result<&Session, TestError> {
+        match self.session {
+            Some(ref session) => Ok(session),
+            None => {
+                // Ensure database is initialized first
+                let db = self.database().await?;
+
+                // Get the underlying SQLx pool from SeaORM connection
+                let pool = db.get_sqlite_connection_pool();
+                let session_store = SqliteStore::new(pool.clone());
+
+                // Initialize the session table in the database
+                session_store
+                    .migrate()
+                    .await
+                    .map_err(|e| sea_orm::DbErr::Custom(e.to_string()))?;
+
+                // Create a new session instance with the store
+                // Session::new requires: id (None for new), store (Arc), expiry (None for default)
+                let session = Session::new(
+                    None,
+                    Arc::new(session_store),
+                    Some(Expiry::OnInactivity(Duration::days(7))),
+                );
+
+                Ok(self.session.insert(session))
+            }
+        }
     }
 }
