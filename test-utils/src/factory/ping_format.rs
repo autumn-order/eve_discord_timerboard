@@ -5,12 +5,14 @@
 //! customization through a builder pattern.
 
 use crate::factory::helpers::next_id;
+use crate::fixture;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test ping formats with customizable fields.
 ///
 /// Provides a builder pattern for creating ping format entities with default
-/// values that can be overridden as needed for specific test scenarios.
+/// values that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the ping_format fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -24,15 +26,15 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct PingFormatFactory<'a> {
     db: &'a DatabaseConnection,
-    guild_id: String,
-    name: String,
+    entity: entity::ping_format::Model,
 }
 
 impl<'a> PingFormatFactory<'a> {
-    /// Creates a new PingFormatFactory with default values.
+    /// Creates a new PingFormatFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - name: `"Ping Format {id}"` where id is auto-incremented
+    /// Defaults are sourced from `fixture::ping_format::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple ping formats.
+    /// The guild_id is set to the provided value.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -42,11 +44,12 @@ impl<'a> PingFormatFactory<'a> {
     /// - `PingFormatFactory` - New factory instance with defaults
     pub fn new(db: &'a DatabaseConnection, guild_id: impl Into<String>) -> Self {
         let id = next_id();
-        Self {
-            db,
-            guild_id: guild_id.into(),
-            name: format!("Ping Format {}", id),
-        }
+        let entity = fixture::ping_format::entity_builder()
+            .guild_id(guild_id)
+            .name(format!("Ping Format {}", id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the ping format name.
@@ -57,7 +60,7 @@ impl<'a> PingFormatFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -69,8 +72,8 @@ impl<'a> PingFormatFactory<'a> {
     pub async fn build(self) -> Result<entity::ping_format::Model, DbErr> {
         entity::ping_format::ActiveModel {
             id: ActiveValue::NotSet,
-            guild_id: ActiveValue::Set(self.guild_id),
-            name: ActiveValue::Set(self.name),
+            guild_id: ActiveValue::Set(self.entity.guild_id),
+            name: ActiveValue::Set(self.entity.name),
         }
         .insert(self.db)
         .await

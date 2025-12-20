@@ -5,12 +5,14 @@
 //! customization through a builder pattern.
 
 use crate::factory::helpers::next_id;
+use crate::fixture;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test ping format fields with customizable fields.
 ///
 /// Provides a builder pattern for creating ping format field entities with default
-/// values that can be overridden as needed for specific test scenarios.
+/// values that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the ping_format_field fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -25,19 +27,15 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct PingFormatFieldFactory<'a> {
     db: &'a DatabaseConnection,
-    ping_format_id: i32,
-    name: String,
-    priority: i32,
-    default_value: Option<String>,
+    entity: entity::ping_format_field::Model,
 }
 
 impl<'a> PingFormatFieldFactory<'a> {
-    /// Creates a new PingFormatFieldFactory with default values.
+    /// Creates a new PingFormatFieldFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - name: `"Field {id}"` where id is auto-incremented
-    /// - priority: 1
-    /// - default_value: None
+    /// Defaults are sourced from `fixture::ping_format_field::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple fields.
+    /// The ping_format_id is set to the provided value.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -47,13 +45,12 @@ impl<'a> PingFormatFieldFactory<'a> {
     /// - `PingFormatFieldFactory` - New factory instance with defaults
     pub fn new(db: &'a DatabaseConnection, ping_format_id: i32) -> Self {
         let id = next_id();
-        Self {
-            db,
-            ping_format_id,
-            name: format!("Field {}", id),
-            priority: 1,
-            default_value: None,
-        }
+        let entity = fixture::ping_format_field::entity_builder()
+            .ping_format_id(ping_format_id)
+            .name(format!("Field {}", id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the field name.
@@ -64,7 +61,7 @@ impl<'a> PingFormatFieldFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -76,7 +73,7 @@ impl<'a> PingFormatFieldFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn priority(mut self, priority: i32) -> Self {
-        self.priority = priority;
+        self.entity.priority = priority;
         self
     }
 
@@ -88,7 +85,7 @@ impl<'a> PingFormatFieldFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn default_value(mut self, default_value: Option<String>) -> Self {
-        self.default_value = default_value;
+        self.entity.default_value = default_value;
         self
     }
 
@@ -100,10 +97,10 @@ impl<'a> PingFormatFieldFactory<'a> {
     pub async fn build(self) -> Result<entity::ping_format_field::Model, DbErr> {
         entity::ping_format_field::ActiveModel {
             id: ActiveValue::NotSet,
-            ping_format_id: ActiveValue::Set(self.ping_format_id),
-            name: ActiveValue::Set(self.name),
-            priority: ActiveValue::Set(self.priority),
-            default_value: ActiveValue::Set(self.default_value),
+            ping_format_id: ActiveValue::Set(self.entity.ping_format_id),
+            name: ActiveValue::Set(self.entity.name),
+            priority: ActiveValue::Set(self.entity.priority),
+            default_value: ActiveValue::Set(self.entity.default_value),
         }
         .insert(self.db)
         .await

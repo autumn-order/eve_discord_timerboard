@@ -4,36 +4,38 @@
 //! Discord guild channels must exist before creating fleet category channels
 //! due to foreign key constraints.
 
+use crate::fixture;
 use entity::discord_guild_channel;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for building Discord guild channel entities with custom values.
 ///
 /// Allows customization of all fields before creation. Use `create_guild_channel()`
-/// for quick creation with defaults.
+/// for quick creation with defaults. Default values are sourced from the
+/// discord_guild_channel fixture for consistency across tests.
 pub struct DiscordGuildChannelFactory<'a> {
     db: &'a DatabaseConnection,
-    guild_id: String,
-    channel_id: String,
-    name: Option<String>,
-    position: i32,
+    entity: discord_guild_channel::Model,
 }
 
 impl<'a> DiscordGuildChannelFactory<'a> {
-    /// Creates a new factory instance with required fields.
+    /// Creates a new factory instance with default values from fixture.
+    ///
+    /// Defaults are sourced from `fixture::discord_guild_channel::entity()`.
+    /// The guild_id and channel_id are set to the provided values.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
     /// - `guild_id` - Discord guild ID this channel belongs to
     /// - `channel_id` - Unique Discord channel ID
     pub fn new(db: &'a DatabaseConnection, guild_id: &str, channel_id: &str) -> Self {
-        Self {
-            db,
-            guild_id: guild_id.to_string(),
-            channel_id: channel_id.to_string(),
-            name: None,
-            position: 0,
-        }
+        let entity = fixture::discord_guild_channel::entity_builder()
+            .guild_id(guild_id)
+            .channel_id(channel_id)
+            .name(format!("Channel {}", channel_id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the channel name.
@@ -41,7 +43,7 @@ impl<'a> DiscordGuildChannelFactory<'a> {
     /// # Arguments
     /// - `name` - Display name for the channel
     pub fn name(mut self, name: &str) -> Self {
-        self.name = Some(name.to_string());
+        self.entity.name = name.to_string();
         self
     }
 
@@ -52,7 +54,7 @@ impl<'a> DiscordGuildChannelFactory<'a> {
     /// # Arguments
     /// - `position` - Channel position value
     pub fn position(mut self, position: i32) -> Self {
-        self.position = position;
+        self.entity.position = position;
         self
     }
 
@@ -62,15 +64,11 @@ impl<'a> DiscordGuildChannelFactory<'a> {
     /// - `Ok(Model)` - The created guild channel entity
     /// - `Err(DbErr)` - Database error during insertion
     pub async fn build(self) -> Result<discord_guild_channel::Model, DbErr> {
-        let name = self
-            .name
-            .unwrap_or_else(|| format!("Channel {}", self.channel_id));
-
         discord_guild_channel::ActiveModel {
-            guild_id: ActiveValue::Set(self.guild_id),
-            channel_id: ActiveValue::Set(self.channel_id),
-            name: ActiveValue::Set(name),
-            position: ActiveValue::Set(self.position),
+            guild_id: ActiveValue::Set(self.entity.guild_id),
+            channel_id: ActiveValue::Set(self.entity.channel_id),
+            name: ActiveValue::Set(self.entity.name),
+            position: ActiveValue::Set(self.entity.position),
         }
         .insert(self.db)
         .await

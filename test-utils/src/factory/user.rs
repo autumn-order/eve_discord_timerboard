@@ -5,13 +5,14 @@
 //! through a builder pattern.
 
 use crate::factory::helpers::next_id;
-use chrono::Utc;
+use crate::fixture;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test users with customizable fields.
 ///
 /// Provides a builder pattern for creating user entities with default values
-/// that can be overridden as needed for specific test scenarios.
+/// that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the user fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -27,18 +28,14 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct UserFactory<'a> {
     db: &'a DatabaseConnection,
-    discord_id: String,
-    name: String,
-    admin: bool,
+    entity: entity::user::Model,
 }
 
 impl<'a> UserFactory<'a> {
-    /// Creates a new UserFactory with default values.
+    /// Creates a new UserFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - discord_id: `"user_{id}"` where id is auto-incremented
-    /// - name: `"User {id}"`
-    /// - admin: `false`
+    /// Defaults are sourced from `fixture::user::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple users.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -47,12 +44,12 @@ impl<'a> UserFactory<'a> {
     /// - `UserFactory` - New factory instance with defaults
     pub fn new(db: &'a DatabaseConnection) -> Self {
         let id = next_id();
-        Self {
-            db,
-            discord_id: id.to_string(),
-            name: format!("User {}", id),
-            admin: false,
-        }
+        let entity = fixture::user::entity_builder()
+            .discord_id(id.to_string())
+            .name(format!("User {}", id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the Discord ID for the user.
@@ -63,7 +60,7 @@ impl<'a> UserFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn discord_id(mut self, discord_id: impl Into<String>) -> Self {
-        self.discord_id = discord_id.into();
+        self.entity.discord_id = discord_id.into();
         self
     }
 
@@ -75,7 +72,7 @@ impl<'a> UserFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -87,7 +84,7 @@ impl<'a> UserFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn admin(mut self, admin: bool) -> Self {
-        self.admin = admin;
+        self.entity.admin = admin;
         self
     }
 
@@ -97,13 +94,12 @@ impl<'a> UserFactory<'a> {
     /// - `Ok(entity::user::Model)` - Created user entity
     /// - `Err(DbErr)` - Database error during insert
     pub async fn build(self) -> Result<entity::user::Model, DbErr> {
-        let now = Utc::now();
         entity::user::ActiveModel {
-            discord_id: ActiveValue::Set(self.discord_id),
-            name: ActiveValue::Set(self.name),
-            admin: ActiveValue::Set(self.admin),
-            last_guild_sync_at: ActiveValue::Set(now),
-            last_role_sync_at: ActiveValue::Set(now),
+            discord_id: ActiveValue::Set(self.entity.discord_id),
+            name: ActiveValue::Set(self.entity.name),
+            admin: ActiveValue::Set(self.entity.admin),
+            last_guild_sync_at: ActiveValue::Set(self.entity.last_guild_sync_at),
+            last_role_sync_at: ActiveValue::Set(self.entity.last_role_sync_at),
         }
         .insert(self.db)
         .await

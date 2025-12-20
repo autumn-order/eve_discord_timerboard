@@ -5,13 +5,15 @@
 //! customization through a builder pattern.
 
 use crate::factory::helpers::next_id;
+use crate::fixture;
 use chrono::Utc;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test fleets with customizable fields.
 ///
 /// Provides a builder pattern for creating fleet entities with default
-/// values that can be overridden as needed for specific test scenarios.
+/// values that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the fleet fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -26,24 +28,15 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct FleetFactory<'a> {
     db: &'a DatabaseConnection,
-    category_id: i32,
-    name: String,
-    commander_id: String,
-    fleet_time: chrono::DateTime<Utc>,
-    description: Option<String>,
-    hidden: bool,
-    disable_reminder: bool,
+    entity: entity::fleet::Model,
 }
 
 impl<'a> FleetFactory<'a> {
-    /// Creates a new FleetFactory with default values.
+    /// Creates a new FleetFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - name: `"Fleet {id}"` where id is auto-incremented
-    /// - fleet_time: 1 hour from now
-    /// - description: `Some("Test fleet description")`
-    /// - hidden: `false`
-    /// - disable_reminder: `false`
+    /// Defaults are sourced from `fixture::fleet::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple fleets.
+    /// The category_id and commander_id are set to the provided values.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -58,16 +51,13 @@ impl<'a> FleetFactory<'a> {
         commander_id: impl Into<String>,
     ) -> Self {
         let id = next_id();
-        Self {
-            db,
-            category_id,
-            name: format!("Fleet {}", id),
-            commander_id: commander_id.into(),
-            fleet_time: Utc::now() + chrono::Duration::hours(1),
-            description: Some("Test fleet description".to_string()),
-            hidden: false,
-            disable_reminder: false,
-        }
+        let entity = fixture::fleet::entity_builder()
+            .category_id(category_id)
+            .name(format!("Fleet {}", id))
+            .commander_id(commander_id)
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the fleet name.
@@ -78,7 +68,7 @@ impl<'a> FleetFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -90,7 +80,7 @@ impl<'a> FleetFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn fleet_time(mut self, fleet_time: chrono::DateTime<Utc>) -> Self {
-        self.fleet_time = fleet_time;
+        self.entity.fleet_time = fleet_time;
         self
     }
 
@@ -102,7 +92,7 @@ impl<'a> FleetFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn description(mut self, description: Option<String>) -> Self {
-        self.description = description;
+        self.entity.description = description;
         self
     }
 
@@ -114,7 +104,7 @@ impl<'a> FleetFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn hidden(mut self, hidden: bool) -> Self {
-        self.hidden = hidden;
+        self.entity.hidden = hidden;
         self
     }
 
@@ -126,7 +116,7 @@ impl<'a> FleetFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn disable_reminder(mut self, disable_reminder: bool) -> Self {
-        self.disable_reminder = disable_reminder;
+        self.entity.disable_reminder = disable_reminder;
         self
     }
 
@@ -138,14 +128,14 @@ impl<'a> FleetFactory<'a> {
     pub async fn build(self) -> Result<entity::fleet::Model, DbErr> {
         entity::fleet::ActiveModel {
             id: ActiveValue::NotSet,
-            category_id: ActiveValue::Set(self.category_id),
-            name: ActiveValue::Set(self.name),
-            commander_id: ActiveValue::Set(self.commander_id),
-            fleet_time: ActiveValue::Set(self.fleet_time),
-            description: ActiveValue::Set(self.description),
-            hidden: ActiveValue::Set(self.hidden),
-            disable_reminder: ActiveValue::Set(self.disable_reminder),
-            created_at: ActiveValue::Set(Utc::now()),
+            category_id: ActiveValue::Set(self.entity.category_id),
+            name: ActiveValue::Set(self.entity.name),
+            commander_id: ActiveValue::Set(self.entity.commander_id),
+            fleet_time: ActiveValue::Set(self.entity.fleet_time),
+            description: ActiveValue::Set(self.entity.description),
+            hidden: ActiveValue::Set(self.entity.hidden),
+            disable_reminder: ActiveValue::Set(self.entity.disable_reminder),
+            created_at: ActiveValue::Set(self.entity.created_at),
         }
         .insert(self.db)
         .await

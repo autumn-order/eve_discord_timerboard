@@ -5,13 +5,14 @@
 //! customization through a builder pattern.
 
 use crate::factory::helpers::next_id;
-use chrono::Utc;
+use crate::fixture;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test Discord guilds with customizable fields.
 ///
 /// Provides a builder pattern for creating Discord guild entities with default
-/// values that can be overridden as needed for specific test scenarios.
+/// values that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the discord_guild fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -26,18 +27,14 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct DiscordGuildFactory<'a> {
     db: &'a DatabaseConnection,
-    guild_id: String,
-    name: String,
-    icon_hash: Option<String>,
+    entity: entity::discord_guild::Model,
 }
 
 impl<'a> DiscordGuildFactory<'a> {
-    /// Creates a new DiscordGuildFactory with default values.
+    /// Creates a new DiscordGuildFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - guild_id: `"guild_{id}"` where id is auto-incremented
-    /// - name: `"Guild {id}"`
-    /// - icon_hash: `None`
+    /// Defaults are sourced from `fixture::discord_guild::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple guilds.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -46,12 +43,12 @@ impl<'a> DiscordGuildFactory<'a> {
     /// - `DiscordGuildFactory` - New factory instance with defaults
     pub fn new(db: &'a DatabaseConnection) -> Self {
         let id = next_id();
-        Self {
-            db,
-            guild_id: id.to_string(),
-            name: format!("Guild {}", id),
-            icon_hash: None,
-        }
+        let entity = fixture::discord_guild::entity_builder()
+            .guild_id(id.to_string())
+            .name(format!("Guild {}", id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the guild ID.
@@ -62,7 +59,7 @@ impl<'a> DiscordGuildFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn guild_id(mut self, guild_id: impl Into<String>) -> Self {
-        self.guild_id = guild_id.into();
+        self.entity.guild_id = guild_id.into();
         self
     }
 
@@ -74,7 +71,7 @@ impl<'a> DiscordGuildFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -86,7 +83,7 @@ impl<'a> DiscordGuildFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn icon_hash(mut self, icon_hash: Option<String>) -> Self {
-        self.icon_hash = icon_hash;
+        self.entity.icon_hash = icon_hash;
         self
     }
 
@@ -97,10 +94,10 @@ impl<'a> DiscordGuildFactory<'a> {
     /// - `Err(DbErr)` - Database error during insert
     pub async fn build(self) -> Result<entity::discord_guild::Model, DbErr> {
         entity::discord_guild::ActiveModel {
-            guild_id: ActiveValue::Set(self.guild_id),
-            name: ActiveValue::Set(self.name),
-            icon_hash: ActiveValue::Set(self.icon_hash),
-            last_sync_at: ActiveValue::Set(Utc::now()),
+            guild_id: ActiveValue::Set(self.entity.guild_id),
+            name: ActiveValue::Set(self.entity.name),
+            icon_hash: ActiveValue::Set(self.entity.icon_hash),
+            last_sync_at: ActiveValue::Set(self.entity.last_sync_at),
         }
         .insert(self.db)
         .await

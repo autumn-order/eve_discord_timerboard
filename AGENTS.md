@@ -1037,19 +1037,44 @@ let test = TestBuilder::new()
 
 ### Available Factories
 
-- `factory::user` - Create and insert user entities
-- `factory::discord_guild` - Create and insert Discord guild entities  
-- `factory::ping_format` - Create and insert ping format entities
-- `factory::fleet_category` - Create and insert fleet category entities
-- `factory::fleet` - Create and insert fleet entities
-- `factory::helpers` - Composite creation methods for entity hierarchies
+- Please see `test-utils/src/factory`
+- Additional factories can be created as needed per domain
 
 ### Available Fixtures
 
-- `fixture::user` - In-memory user models (entity, domain, DTO)
-- `fixture::character` - In-memory character models
-- `fixture::timer` - In-memory timer models
-- Additional fixtures created as needed per domain
+- Please see `test-utils/src/fixture`
+- Additional fixtures can be created as needed per domain
+
+### Factories Use Fixtures
+
+**Factories use fixtures internally for default values**, ensuring consistency across all tests. This means:
+
+1. **Single source of truth**: Default test data is defined once in fixtures
+2. **Factories leverage fixtures**: Factory default values come from `fixture::{domain}::entity_builder()`
+3. **Easy maintenance**: Changing default test data only requires updating the fixture
+
+**Example of factory using fixture**:
+
+```rust
+// In factory/user.rs
+impl<'a> UserFactory<'a> {
+    pub fn new(db: &'a DatabaseConnection) -> Self {
+        let id = next_id();
+        // Factory uses fixture for defaults
+        let entity = fixture::user::entity_builder()
+            .discord_id(id.to_string())
+            .name(format!("User {}", id))
+            .build();
+        
+        Self { db, entity }
+    }
+}
+```
+
+This pattern allows:
+- **Fixtures** to define what "default test data" means
+- **Factories** to use those defaults and add uniqueness (auto-incrementing IDs)
+- **Tests** to use either fixtures (unit tests) or factories (integration tests)
 
 ### Benefits
 

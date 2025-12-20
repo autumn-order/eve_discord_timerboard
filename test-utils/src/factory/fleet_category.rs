@@ -5,12 +5,14 @@
 //! customization through a builder pattern.
 
 use crate::factory::helpers::next_id;
+use crate::fixture;
 use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 
 /// Factory for creating test fleet categories with customizable fields.
 ///
 /// Provides a builder pattern for creating fleet category entities with default
-/// values that can be overridden as needed for specific test scenarios.
+/// values that can be overridden as needed for specific test scenarios. Default values
+/// are sourced from the fleet_category fixture for consistency across tests.
 ///
 /// # Example
 ///
@@ -25,22 +27,15 @@ use sea_orm::{ActiveModelTrait, ActiveValue, DatabaseConnection, DbErr};
 /// ```
 pub struct FleetCategoryFactory<'a> {
     db: &'a DatabaseConnection,
-    guild_id: String,
-    ping_format_id: i32,
-    name: String,
-    ping_cooldown: Option<i32>,
-    ping_reminder: Option<i32>,
-    max_pre_ping: Option<i32>,
+    entity: entity::fleet_category::Model,
 }
 
 impl<'a> FleetCategoryFactory<'a> {
-    /// Creates a new FleetCategoryFactory with default values.
+    /// Creates a new FleetCategoryFactory with default values from fixture.
     ///
-    /// Defaults:
-    /// - name: `"Category {id}"` where id is auto-incremented
-    /// - ping_cooldown: `None`
-    /// - ping_reminder: `None`
-    /// - max_pre_ping: `None`
+    /// Defaults are sourced from `fixture::fleet_category::entity()` with a unique
+    /// auto-incremented ID to prevent conflicts when creating multiple categories.
+    /// The guild_id and ping_format_id are set to the provided values.
     ///
     /// # Arguments
     /// - `db` - Database connection for inserting the entity
@@ -55,15 +50,13 @@ impl<'a> FleetCategoryFactory<'a> {
         ping_format_id: i32,
     ) -> Self {
         let id = next_id();
-        Self {
-            db,
-            guild_id: guild_id.into(),
-            ping_format_id,
-            name: format!("Category {}", id),
-            ping_cooldown: None,
-            ping_reminder: None,
-            max_pre_ping: None,
-        }
+        let entity = fixture::fleet_category::entity_builder()
+            .guild_id(guild_id)
+            .ping_format_id(ping_format_id)
+            .name(format!("Category {}", id))
+            .build();
+
+        Self { db, entity }
     }
 
     /// Sets the category name.
@@ -74,7 +67,7 @@ impl<'a> FleetCategoryFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn name(mut self, name: impl Into<String>) -> Self {
-        self.name = name.into();
+        self.entity.name = name.into();
         self
     }
 
@@ -86,7 +79,7 @@ impl<'a> FleetCategoryFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn ping_cooldown(mut self, cooldown: Option<i32>) -> Self {
-        self.ping_cooldown = cooldown;
+        self.entity.ping_cooldown = cooldown;
         self
     }
 
@@ -98,7 +91,7 @@ impl<'a> FleetCategoryFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn ping_reminder(mut self, reminder: Option<i32>) -> Self {
-        self.ping_reminder = reminder;
+        self.entity.ping_reminder = reminder;
         self
     }
 
@@ -110,7 +103,7 @@ impl<'a> FleetCategoryFactory<'a> {
     /// # Returns
     /// - `Self` - Factory instance for method chaining
     pub fn max_pre_ping(mut self, max_pre_ping: Option<i32>) -> Self {
-        self.max_pre_ping = max_pre_ping;
+        self.entity.max_pre_ping = max_pre_ping;
         self
     }
 
@@ -122,12 +115,12 @@ impl<'a> FleetCategoryFactory<'a> {
     pub async fn build(self) -> Result<entity::fleet_category::Model, DbErr> {
         entity::fleet_category::ActiveModel {
             id: ActiveValue::NotSet,
-            guild_id: ActiveValue::Set(self.guild_id),
-            ping_format_id: ActiveValue::Set(self.ping_format_id),
-            name: ActiveValue::Set(self.name),
-            ping_cooldown: ActiveValue::Set(self.ping_cooldown),
-            ping_reminder: ActiveValue::Set(self.ping_reminder),
-            max_pre_ping: ActiveValue::Set(self.max_pre_ping),
+            guild_id: ActiveValue::Set(self.entity.guild_id),
+            ping_format_id: ActiveValue::Set(self.entity.ping_format_id),
+            name: ActiveValue::Set(self.entity.name),
+            ping_cooldown: ActiveValue::Set(self.entity.ping_cooldown),
+            ping_reminder: ActiveValue::Set(self.entity.ping_reminder),
+            max_pre_ping: ActiveValue::Set(self.entity.max_pre_ping),
         }
         .insert(self.db)
         .await
