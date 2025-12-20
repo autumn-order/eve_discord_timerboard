@@ -658,6 +658,14 @@ pub struct ScheduledWorkerJob {
 
 # Testing
 
+## Running tests
+
+All tests are gated behind feature `server`, run tests by using
+
+```bash
+cargo test --features server
+```
+
 ## How we are testing
 
 **Unit Testing**
