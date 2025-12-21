@@ -11,8 +11,7 @@
 
 use migration::OnConflict;
 use sea_orm::{ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
-use serenity::all::{Role, RoleId};
-use std::collections::HashMap;
+use serenity::all::Role;
 
 use crate::server::model::discord::DiscordGuildRole;
 
@@ -74,30 +73,57 @@ impl<'a> DiscordGuildRoleRepository<'a> {
 
     /// Upserts multiple Discord guild roles in batch.
     ///
-    /// Creates or updates multiple role records from a Discord role hashmap.
-    /// Iterates through all roles and upserts each one individually. Used when
-    /// syncing all roles for a guild from Discord.
+    /// Creates or updates multiple role records from a slice of Discord roles using
+    /// a single batch operation for improved performance. Used when syncing all roles
+    /// for a guild from Discord.
     ///
     /// # Arguments
     /// - `guild_id` - Discord guild ID that owns these roles
-    /// - `roles` - HashMap of Discord roles from Serenity (role_id -> role)
+    /// - `roles` - Slice of Discord roles from Serenity
     ///
     /// # Returns
-    /// - `Ok(Vec<DiscordGuildRoleParam>)` - Vector of upserted roles as param models
-    /// - `Err(DbErr)` - Database error during any upsert operation
+    /// - `Ok(Vec<DiscordGuildRole>)` - Vector of upserted roles as domain models
+    /// - `Err(DbErr)` - Database error during batch upsert operation
     pub async fn upsert_many(
         &self,
         guild_id: u64,
-        roles: &HashMap<RoleId, Role>,
+        roles: &[Role],
     ) -> Result<Vec<DiscordGuildRole>, DbErr> {
-        let mut results = Vec::new();
-
-        for role in roles.values() {
-            let param = self.upsert(guild_id, role).await?;
-            results.push(param);
+        if roles.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(results)
+        // Build active models for all roles
+        let active_models: Vec<entity::discord_guild_role::ActiveModel> = roles
+            .iter()
+            .map(|role| entity::discord_guild_role::ActiveModel {
+                guild_id: ActiveValue::Set(guild_id.to_string()),
+                role_id: ActiveValue::Set(role.id.get().to_string()),
+                name: ActiveValue::Set(role.name.clone()),
+                color: ActiveValue::Set(format!("#{:06X}", role.colour.0)),
+                position: ActiveValue::Set(role.position as i16),
+            })
+            .collect();
+
+        // Perform batch upsert
+        let entities = entity::prelude::DiscordGuildRole::insert_many(active_models)
+            .on_conflict(
+                OnConflict::column(entity::discord_guild_role::Column::RoleId)
+                    .update_columns([
+                        entity::discord_guild_role::Column::Name,
+                        entity::discord_guild_role::Column::Color,
+                        entity::discord_guild_role::Column::Position,
+                    ])
+                    .to_owned(),
+            )
+            .exec_with_returning(self.db)
+            .await?;
+
+        // Convert all entities to domain models
+        entities
+            .into_iter()
+            .map(DiscordGuildRole::from_entity)
+            .collect()
     }
 
     /// Deletes a Discord guild role by role ID.

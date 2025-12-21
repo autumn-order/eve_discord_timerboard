@@ -1,10 +1,11 @@
 use super::*;
+use crate::server::model::discord::UpsertGuildParam;
 use sea_orm::{ActiveModelTrait, PaginatorTrait};
 
 /// Tests upserting a new Discord guild.
 ///
 /// Verifies that the repository successfully creates a new guild record
-/// with the specified guild_id, name, and icon_hash from a Serenity Guild object.
+/// with the specified guild_id, name, and icon_hash from a UpsertGuildParam.
 ///
 /// Expected: Ok with guild created
 #[tokio::test]
@@ -17,9 +18,10 @@ async fn upserts_new_guild() -> Result<(), DbErr> {
     let db = test.db.as_ref().unwrap();
 
     let guild = create_test_guild(123456789, "Test Guild", Some("abc123"));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     if let Err(ref e) = result {
         eprintln!("Upsert error: {:?}", e);
@@ -69,9 +71,10 @@ async fn updates_existing_guild() -> Result<(), DbErr> {
 
     // Upsert with new values (use valid hex string)
     let guild = create_test_guild(123456789, "New Name", Some("abcdef12"));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -107,9 +110,10 @@ async fn upserts_guild_with_none_icon() -> Result<(), DbErr> {
     let db = test.db.as_ref().unwrap();
 
     let guild = create_test_guild(123456789, "No Icon Guild", None);
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -143,9 +147,10 @@ async fn updates_icon_from_some_to_none() -> Result<(), DbErr> {
 
     // Upsert with no icon
     let guild = create_test_guild(123456789, "Test Guild", None);
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -187,9 +192,10 @@ async fn updates_icon_from_none_to_some() -> Result<(), DbErr> {
 
     // Upsert with icon (use valid hex string)
     let guild = create_test_guild(123456789, "Test Guild", Some("abcdef12"));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -221,9 +227,9 @@ async fn upserts_multiple_guilds() -> Result<(), DbErr> {
     let guild3 = create_test_guild(333333333, "Guild 3", None);
 
     let repo = DiscordGuildRepository::new(db);
-    repo.upsert(guild1).await?;
-    repo.upsert(guild2).await?;
-    repo.upsert(guild3).await?;
+    repo.upsert(UpsertGuildParam::from_guild(&guild1)).await?;
+    repo.upsert(UpsertGuildParam::from_guild(&guild2)).await?;
+    repo.upsert(UpsertGuildParam::from_guild(&guild3)).await?;
 
     // Verify all guilds exist
     let count = entity::prelude::DiscordGuild::find().count(db).await?;
@@ -252,9 +258,10 @@ async fn upserts_guild_with_special_characters() -> Result<(), DbErr> {
         "Guild 🎮 with émojis & spëcial ⭐ chars!",
         Some("icon"),
     );
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -293,9 +300,10 @@ async fn preserves_last_sync_at() -> Result<(), DbErr> {
 
     // Upsert the same guild with updated name
     let guild = create_test_guild(123456789, "Updated Name", Some("icon"));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    repo.upsert(guild).await?;
+    repo.upsert(param).await?;
 
     // Verify last_sync_at wasn't changed
     let db_guild = entity::prelude::DiscordGuild::find()
@@ -328,9 +336,10 @@ async fn upserts_guild_with_long_name() -> Result<(), DbErr> {
 
     let long_name = "A".repeat(100); // Discord max is 100 characters
     let guild = create_test_guild(123456789, &long_name, Some("icon"));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();
@@ -356,9 +365,10 @@ async fn upserts_guild_with_long_icon_hash() -> Result<(), DbErr> {
 
     let icon_hash = "a_".to_string() + &"0".repeat(32); // Animated icon prefix + 32 hex chars = 34 total
     let guild = create_test_guild(123456789, "Test Guild", Some(&icon_hash));
+    let param = UpsertGuildParam::from_guild(&guild);
 
     let repo = DiscordGuildRepository::new(db);
-    let result = repo.upsert(guild).await;
+    let result = repo.upsert(param).await;
 
     assert!(result.is_ok());
     let upserted = result.unwrap();

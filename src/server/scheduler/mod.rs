@@ -9,3 +9,4 @@
 //!   form-ups, and maintains upcoming fleets lists in configured channels
 
 pub mod fleet_notifications;
+pub mod sync;

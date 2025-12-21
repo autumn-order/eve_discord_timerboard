@@ -6,8 +6,7 @@
 
 use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
-use serenity::all::{ChannelId, ChannelType, GuildChannel};
-use std::collections::HashMap;
+use serenity::all::{ChannelType, GuildChannel};
 
 use crate::{
     model::discord::{DiscordGuildChannelDto, PaginatedDiscordGuildChannelsDto},
@@ -47,7 +46,7 @@ impl<'a> DiscordGuildChannelService<'a> {
     ///
     /// # Arguments
     /// - `guild_id` - Discord guild ID to update channels for
-    /// - `guild_channels` - HashMap of all channels in the guild from Discord API
+    /// - `guild_channels` - Slice of all channels in the guild from Discord API
     ///
     /// # Returns
     /// - `Ok(())` - Channels synced successfully
@@ -55,23 +54,26 @@ impl<'a> DiscordGuildChannelService<'a> {
     pub async fn update_channels(
         &self,
         guild_id: u64,
-        guild_channels: &HashMap<ChannelId, GuildChannel>,
+        guild_channels: &[GuildChannel],
     ) -> Result<(), AppError> {
         let channel_repo = DiscordGuildChannelRepository::new(self.db);
 
         // Filter for text channels only
-        let text_channels: HashMap<ChannelId, &GuildChannel> = guild_channels
+        let text_channels: Vec<&GuildChannel> = guild_channels
             .iter()
-            .filter(|(_, channel)| channel.kind == ChannelType::Text)
-            .map(|(id, channel)| (*id, channel))
+            .filter(|channel| channel.kind == ChannelType::Text)
             .collect();
 
         // Get existing channels from database
         let existing_channels = channel_repo.get_by_guild_id(guild_id).await?;
 
         // Find channels that no longer exist in Discord and delete them
-        for existing_channel in existing_channels {
-            if !text_channels.contains_key(&ChannelId::new(existing_channel.channel_id)) {
+        for existing_channel in &existing_channels {
+            let exists = text_channels
+                .iter()
+                .any(|channel| channel.id.get() == existing_channel.channel_id);
+
+            if !exists {
                 channel_repo.delete(existing_channel.channel_id).await?;
                 tracing::info!(
                     "Deleted channel {} from guild {}",
@@ -82,7 +84,7 @@ impl<'a> DiscordGuildChannelService<'a> {
         }
 
         // Upsert all current text channels
-        for channel in text_channels.values() {
+        for channel in &text_channels {
             channel_repo.upsert(guild_id, channel).await?;
         }
 

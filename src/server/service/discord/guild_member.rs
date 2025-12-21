@@ -4,10 +4,22 @@
 //! member data with the database. It tracks ALL Discord users who are members of guilds
 //! the bot has access to, not just users who have logged into the application.
 
+use std::sync::Arc;
+
 use dioxus_logger::tracing;
 use sea_orm::DatabaseConnection;
+use serenity::all::Http;
 
-use crate::server::{data::discord::DiscordGuildMemberRepository, error::AppError};
+use crate::server::{
+    data::discord::DiscordGuildMemberRepository, error::AppError,
+    service::discord::UserDiscordGuildRoleService,
+};
+
+/// Maximum number of members to fetch per API request.
+///
+/// Discord's API supports up to 1000 members per request. Using the maximum
+/// reduces the number of API calls needed for large guilds.
+static MEMBERS_PER_REQUEST: u64 = 1000;
 
 /// Service for managing Discord guild member data.
 ///
@@ -18,6 +30,7 @@ use crate::server::{data::discord::DiscordGuildMemberRepository, error::AppError
 pub struct DiscordGuildMemberService<'a> {
     /// Database connection for repository operations.
     db: &'a DatabaseConnection,
+    discord_http: Arc<Http>,
 }
 
 impl<'a> DiscordGuildMemberService<'a> {
@@ -28,39 +41,104 @@ impl<'a> DiscordGuildMemberService<'a> {
     ///
     /// # Returns
     /// - `DiscordGuildMemberService` - New service instance
-    pub fn new(db: &'a DatabaseConnection) -> Self {
-        Self { db }
+    pub fn new(db: &'a DatabaseConnection, discord_http: Arc<Http>) -> Self {
+        Self { db, discord_http }
     }
 
     /// Syncs all members of a guild with the database.
     ///
-    /// Performs a complete sync of guild membership by updating the database to reflect
-    /// the current state from Discord. Stores ALL Discord users who are members of the
-    /// guild, not just users who have logged into the application. Removes members who
-    /// have left and adds or updates current members. Used during bot startup and when
-    /// significant membership changes occur.
+    /// Performs a complete sync of guild membership by fetching all members from Discord's API
+    /// using pagination (up to 1000 members per request) and updating the database to reflect
+    /// the current state. Stores ALL Discord users who are members of the guild, not just users
+    /// who have logged into the application. Removes members who have left and adds or updates
+    /// current members.
+    ///
+    /// This method also syncs role assignments for users who have logged into the application,
+    /// enabling permission checks based on Discord roles. Members without app accounts are
+    /// tracked but do not have role assignments synchronized.
+    ///
+    /// Requires the `GUILD_MEMBERS` privileged intent to fetch all guild members.
     ///
     /// # Arguments
-    /// - `guild_id` - Discord guild ID
-    /// - `members` - Slice of tuples containing (user_id, username, nickname) for all members
+    /// - `guild_id` - Discord guild ID to sync members for
     ///
     /// # Returns
     /// - `Ok(())` - Sync completed successfully
     /// - `Err(AppError::Database)` - Database error during sync
-    pub async fn sync_guild_members(
-        &self,
-        guild_id: u64,
-        members: &[(u64, String, Option<String>)],
-    ) -> Result<(), AppError> {
+    /// - `Err(AppError)` - Error fetching members from Discord API
+    pub async fn sync_guild_members(&self, guild_id: u64) -> Result<(), AppError> {
         let member_repo = DiscordGuildMemberRepository::new(self.db);
 
-        tracing::debug!("Syncing {} members for guild {}", members.len(), guild_id);
+        let mut all_members = Vec::new();
+        let mut after: Option<u64> = None;
 
-        member_repo.sync_guild_members(guild_id, members).await?;
+        // Fetch ALL members from Discord API with pagination
+        // This requires the GUILD_MEMBERS privileged intent
+        loop {
+            match self
+                .discord_http
+                .get_guild_members(guild_id.into(), Some(MEMBERS_PER_REQUEST), after)
+                .await
+            {
+                Ok(members) => {
+                    if members.is_empty() {
+                        break;
+                    }
+
+                    tracing::trace!(
+                        "Fetched {} members from Discord API for guild {} (total so far: {})",
+                        members.len(),
+                        guild_id,
+                        all_members.len() + members.len()
+                    );
+
+                    // Set up pagination for next iteration
+                    after = members.last().map(|m| m.user.id.get());
+
+                    let fetched_count = members.len();
+
+                    // Add to our collection
+                    all_members.extend(members);
+
+                    // If we got less than the maximum, we've reached the end
+                    if fetched_count < MEMBERS_PER_REQUEST as usize {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch guild {} members from API: {:?}",
+                        guild_id,
+                        e
+                    );
+                    break;
+                }
+            }
+        }
+
+        // Convert to the format needed for sync: (user_id, username, nickname)
+        let member_data: Vec<(u64, String, Option<String>)> = all_members
+            .iter()
+            .map(|m| (m.user.id.get(), m.user.name.clone(), m.nick.clone()))
+            .collect();
+
+        member_repo
+            .sync_guild_members(guild_id, &member_data)
+            .await?;
+
+        // Sync role memberships for users
+        // Only users with app accounts need role assignments for permission checks
+        let user_role_service = UserDiscordGuildRoleService::new(self.db);
+        if let Err(e) = user_role_service
+            .sync_guild_member_roles(guild_id, &all_members)
+            .await
+        {
+            tracing::error!("Failed to sync guild {} member roles: {:?}", guild_id, e);
+        }
 
         tracing::info!(
             "Successfully synced {} members for guild {}",
-            members.len(),
+            member_data.len(),
             guild_id
         );
 

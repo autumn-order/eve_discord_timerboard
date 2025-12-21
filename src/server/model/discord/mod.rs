@@ -11,7 +11,7 @@ pub mod role;
 pub mod user_guild_role;
 
 pub use channel::DiscordGuildChannel;
-pub use guild::DiscordGuild;
+pub use guild::{DiscordGuild, UpsertGuildParam};
 pub use guild_member::DiscordGuildMember;
 pub use role::DiscordGuildRole;
 pub use user_guild_role::UserDiscordGuildRole;

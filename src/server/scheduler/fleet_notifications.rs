@@ -20,6 +20,8 @@ use crate::server::{
     error::AppError, model::fleet::Fleet, service::fleet_notification::FleetNotificationService,
 };
 
+use super::sync::process_guild_sync;
+
 /// Maximum age for sending form-up notifications.
 ///
 /// Form-up notifications will only be sent if the fleet time is within this duration
@@ -62,7 +64,7 @@ pub async fn start_scheduler(
         let app_url = job_app_url.clone();
 
         Box::pin(async move {
-            tracing::debug!("Running fleet notifications job");
+            tracing::trace!("Running fleet notifications job");
             if let Err(e) = process_fleet_notifications(&db, http, app_url).await {
                 tracing::error!("Error processing fleet notifications: {}", e);
             }
@@ -83,7 +85,7 @@ pub async fn start_scheduler(
         let app_url = list_app_url.clone();
 
         Box::pin(async move {
-            tracing::debug!("Running upcoming fleets list update job");
+            tracing::trace!("Running upcoming fleets list update job");
             if let Err(e) = process_upcoming_fleets_lists(&db, http, app_url).await {
                 tracing::error!("Error processing upcoming fleets lists: {}", e);
             }
@@ -91,6 +93,23 @@ pub async fn start_scheduler(
     })?;
 
     scheduler.add(list_job).await?;
+
+    let sync_db = db.clone();
+    let sync_http = discord_http.clone();
+
+    let sync_job = Job::new_async("5 * * * * *", move |_uuid, _lock| {
+        let db = sync_db.clone();
+        let http = sync_http.clone();
+
+        Box::pin(async move {
+            tracing::trace!("Running periodic Discord sync update job");
+            if let Err(e) = process_guild_sync(&db, http).await {
+                tracing::error!("Error processing periodic Discord guild sync: {}", e)
+            }
+        })
+    })?;
+
+    scheduler.add(sync_job).await?;
     scheduler.start().await?;
 
     tracing::info!("Fleet notification scheduler started successfully");

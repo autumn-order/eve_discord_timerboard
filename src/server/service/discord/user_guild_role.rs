@@ -59,7 +59,6 @@ impl<'a> UserDiscordGuildRoleService<'a> {
 
         // Get all roles from database for this guild
         let guild_id = member.guild_id.get();
-        let discord_user_id = member.user.id.get();
         let db_roles = role_repo.get_by_guild_id(guild_id).await?;
 
         // Find matching role IDs (roles the user has that are in our database)
@@ -81,13 +80,6 @@ impl<'a> UserDiscordGuildRoleService<'a> {
         user_role_repo
             .sync_user_roles(user_id, &matching_discord_role_ids)
             .await?;
-
-        tracing::debug!(
-            "Synced {} role memberships for user {} in guild {}",
-            matching_discord_role_ids.len(),
-            discord_user_id,
-            guild_id
-        );
 
         Ok(())
     }
@@ -113,12 +105,6 @@ impl<'a> UserDiscordGuildRoleService<'a> {
     ) -> Result<(), AppError> {
         use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-        tracing::debug!(
-            "Syncing role memberships for guild {} ({} members)",
-            guild_id,
-            members.len()
-        );
-
         // Get all logged-in users
         let member_discord_ids: Vec<String> = members
             .iter()
@@ -131,10 +117,6 @@ impl<'a> UserDiscordGuildRoleService<'a> {
             .await?;
 
         if logged_in_users.is_empty() {
-            tracing::debug!(
-                "No logged-in users found in guild {}, skipping role sync",
-                guild_id
-            );
             return Ok(());
         }
 
@@ -163,12 +145,6 @@ impl<'a> UserDiscordGuildRoleService<'a> {
                 }
             }
         }
-
-        tracing::debug!(
-            "Synced role memberships for {} users in guild {}",
-            synced_user_ids.len(),
-            guild_id
-        );
 
         // Update last_role_sync_at timestamps for all synced users
         if !synced_user_ids.is_empty() {

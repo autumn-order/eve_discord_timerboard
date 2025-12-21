@@ -6,8 +6,7 @@
 
 use dioxus_logger::tracing;
 use sea_orm::{DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder};
-use serenity::all::{Role, RoleId};
-use std::collections::HashMap;
+use serenity::all::Role;
 
 use crate::{
     model::discord::{DiscordGuildRoleDto, PaginatedDiscordGuildRolesDto},
@@ -45,16 +44,12 @@ impl<'a> DiscordGuildRoleService<'a> {
     ///
     /// # Arguments
     /// - `guild_id` - Discord guild ID to update roles for
-    /// - `guild_roles` - HashMap of current Discord roles from the API
+    /// - `guild_roles` - Slice of current Discord roles from the API
     ///
     /// # Returns
     /// - `Ok(())` - Roles synced successfully
     /// - `Err(AppError::Database)` - Database error during deletion or upsert
-    pub async fn update_roles(
-        &self,
-        guild_id: u64,
-        guild_roles: &HashMap<RoleId, Role>,
-    ) -> Result<(), AppError> {
+    pub async fn update_roles(&self, guild_id: u64, guild_roles: &[Role]) -> Result<(), AppError> {
         let role_repo = DiscordGuildRoleRepository::new(self.db);
 
         // Get existing roles from database
@@ -62,15 +57,22 @@ impl<'a> DiscordGuildRoleService<'a> {
 
         // Find roles that no longer exist in Discord and delete them
         for existing_role in existing_roles {
-            let role_id = existing_role.role_id;
-            if !guild_roles.contains_key(&RoleId::new(role_id)) {
-                role_repo.delete(role_id).await?;
-                tracing::info!("Deleted role {} from guild {}", role_id, guild_id);
+            let exists = guild_roles
+                .iter()
+                .any(|role| role.id.get() == existing_role.role_id);
+
+            if !exists {
+                role_repo.delete(existing_role.role_id).await?;
+                tracing::info!(
+                    "Deleted role {} from guild {}",
+                    existing_role.role_id,
+                    guild_id
+                );
             }
         }
 
         // Upsert all current roles
-        role_repo.upsert_many(guild_id, guild_roles).await?;
+        role_repo.upsert_many(guild_id, &guild_roles).await?;
 
         tracing::info!("Updated {} roles for guild {}", guild_roles.len(), guild_id);
 

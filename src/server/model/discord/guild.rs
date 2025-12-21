@@ -6,6 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use sea_orm::DbErr;
+use serenity::all::{Guild, PartialGuild};
 
 use crate::model::discord::DiscordGuildDto;
 
@@ -64,6 +65,33 @@ impl DiscordGuild {
             guild_id: self.guild_id,
             name: self.name,
             icon_hash: self.icon_hash,
+        }
+    }
+}
+
+pub struct UpsertGuildParam {
+    /// Discord guild ID as a u64.
+    pub guild_id: u64,
+    /// Guild display name.
+    pub name: String,
+    /// Optional guild icon hash for constructing icon URLs.
+    pub icon_hash: Option<String>,
+}
+
+impl UpsertGuildParam {
+    pub fn from_guild(guild: &Guild) -> Self {
+        Self {
+            guild_id: guild.id.get(),
+            name: guild.name.to_string(),
+            icon_hash: guild.icon_hash.as_ref().map(|i| i.to_string()),
+        }
+    }
+
+    pub fn from_partial_guild(guild: &PartialGuild) -> Self {
+        Self {
+            guild_id: guild.id.get(),
+            name: guild.name.to_string(),
+            icon_hash: guild.icon_hash.as_ref().map(|i| i.to_string()),
         }
     }
 }

@@ -36,7 +36,7 @@ use crate::server::service::discord::{DiscordGuildMemberService, UserDiscordGuil
 /// - `new_member` - The member who joined the guild from Discord
 pub async fn handle_guild_member_addition(
     db: &DatabaseConnection,
-    _ctx: Context,
+    ctx: Context,
     new_member: Member,
 ) {
     let user_id = new_member.user.id.get();
@@ -52,7 +52,7 @@ pub async fn handle_guild_member_addition(
     );
 
     // Add member to guild_member table (tracks ALL members)
-    let member_service = DiscordGuildMemberService::new(db);
+    let member_service = DiscordGuildMemberService::new(db, ctx.http);
     if let Err(e) = member_service
         .upsert_member(user_id, guild_id, username.clone(), nickname.clone())
         .await
@@ -108,7 +108,7 @@ pub async fn handle_guild_member_addition(
 /// - `_member_data_if_available` - Member data if it was in cache (unused)
 pub async fn handle_guild_member_removal(
     db: &DatabaseConnection,
-    _ctx: Context,
+    ctx: Context,
     guild_id: GuildId,
     user: User,
     _member_data_if_available: Option<Member>,
@@ -119,7 +119,7 @@ pub async fn handle_guild_member_removal(
     tracing::debug!("Member {} ({}) left guild {}", user.name, user_id, guild_id);
 
     // Remove member from guild_member table
-    let member_service = DiscordGuildMemberService::new(db);
+    let member_service = DiscordGuildMemberService::new(db, ctx.http);
     if let Err(e) = member_service.remove_member(user_id, guild_id).await {
         tracing::error!(
             "Failed to remove guild member {} ({}) from guild {}: {:?}",
@@ -162,7 +162,7 @@ pub async fn handle_guild_member_removal(
 /// - `_event` - Raw event data (unused)
 pub async fn handle_guild_member_update(
     db: &DatabaseConnection,
-    _ctx: Context,
+    ctx: Context,
     _old: Option<Member>,
     new: Option<Member>,
     _event: GuildMemberUpdateEvent,
@@ -185,7 +185,7 @@ pub async fn handle_guild_member_update(
     );
 
     // Update member in guild_member table (updates username/nickname)
-    let member_service = DiscordGuildMemberService::new(db);
+    let member_service = DiscordGuildMemberService::new(db, ctx.http);
     if let Err(e) = member_service
         .upsert_member(user_id, guild_id, username.clone(), nickname.clone())
         .await

@@ -1,4 +1,6 @@
 use super::*;
+use serenity::all::Role;
+use std::collections::HashMap;
 
 /// Tests upserting multiple roles in batch.
 ///
@@ -23,10 +25,7 @@ async fn upserts_multiple_roles() -> Result<(), DbErr> {
     let role2 = create_test_role(222222222, "Role 2", 0x00FF00, 2);
     let role3 = create_test_role(333333333, "Role 3", 0x0000FF, 3);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role1);
-    roles.insert(RoleId::new(222222222), role2);
-    roles.insert(RoleId::new(333333333), role3);
+    let roles: Vec<Role> = vec![role1, role2, role3];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -45,9 +44,9 @@ async fn upserts_multiple_roles() -> Result<(), DbErr> {
     Ok(())
 }
 
-/// Tests upserting empty role HashMap.
+/// Tests upserting empty role slice.
 ///
-/// Verifies that upserting an empty HashMap succeeds and returns
+/// Verifies that upserting an empty slice succeeds and returns
 /// an empty vector without errors.
 ///
 /// Expected: Ok with empty vector
@@ -64,7 +63,7 @@ async fn upserts_empty_roles() -> Result<(), DbErr> {
     let guild = factory::discord_guild::create_guild(db).await?;
     let guild_id = guild.guild_id.parse::<u64>().unwrap();
 
-    let roles = HashMap::new();
+    let roles: Vec<Role> = vec![];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -114,9 +113,7 @@ async fn updates_existing_roles() -> Result<(), DbErr> {
     let role1 = create_test_role(111111111, "New Name 1", 0xFF0000, 10);
     let role2 = create_test_role(222222222, "New Name 2", 0x00FF00, 20);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role1);
-    roles.insert(RoleId::new(222222222), role2);
+    let roles: Vec<Role> = vec![role1, role2];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -177,10 +174,7 @@ async fn upserts_mix_of_new_and_existing_roles() -> Result<(), DbErr> {
     let role2 = create_test_role(222222222, "New Role 1", 0x00FF00, 20);
     let role3 = create_test_role(333333333, "New Role 2", 0x0000FF, 30);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role1);
-    roles.insert(RoleId::new(222222222), role2);
-    roles.insert(RoleId::new(333333333), role3);
+    let roles: Vec<Role> = vec![role1, role2, role3];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -209,7 +203,7 @@ async fn upserts_mix_of_new_and_existing_roles() -> Result<(), DbErr> {
 
 /// Tests upsert_many with single role.
 ///
-/// Verifies that upsert_many works correctly with a HashMap containing
+/// Verifies that upsert_many works correctly with a slice containing
 /// only one role.
 ///
 /// Expected: Ok with single role created
@@ -228,8 +222,7 @@ async fn upserts_single_role() -> Result<(), DbErr> {
 
     let role = create_test_role(111111111, "Single Role", 0xFF5733, 5);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role);
+    let roles: Vec<Role> = vec![role];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -265,9 +258,7 @@ async fn preserves_guild_id_for_all_roles() -> Result<(), DbErr> {
     let role1 = create_test_role(111111111, "Role 1", 0xFF0000, 1);
     let role2 = create_test_role(222222222, "Role 2", 0x00FF00, 2);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role1);
-    roles.insert(RoleId::new(222222222), role2);
+    let roles: Vec<Role> = vec![role1, role2];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
@@ -307,11 +298,7 @@ async fn upserts_roles_with_various_colors() -> Result<(), DbErr> {
     let role3 = create_test_role(333333333, "Blue", 0x0000FF, 3);
     let role4 = create_test_role(444444444, "No Color", 0, 4);
 
-    let mut roles = HashMap::new();
-    roles.insert(RoleId::new(111111111), role1);
-    roles.insert(RoleId::new(222222222), role2);
-    roles.insert(RoleId::new(333333333), role3);
-    roles.insert(RoleId::new(444444444), role4);
+    let roles: Vec<Role> = vec![role1, role2, role3, role4];
 
     let repo = DiscordGuildRoleRepository::new(db);
     let result = repo.upsert_many(guild_id, &roles).await;
