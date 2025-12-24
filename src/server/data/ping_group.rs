@@ -7,7 +7,7 @@
 
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
-    IntoActiveModel, QueryFilter,
+    IntoActiveModel, PaginatorTrait, QueryFilter,
 };
 
 use crate::server::{
@@ -130,6 +130,16 @@ impl<'a> PingGroupRepository<'a> {
             .await?;
 
         Ok(())
+    }
+
+    /// Counts the number of ping groups for a guild
+    pub async fn count_by_guild(&self, guild_id: u64) -> Result<usize, AppError> {
+        let count = entity::prelude::PingGroup::find()
+            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
+            .count(self.db)
+            .await?;
+
+        Ok(count as usize)
     }
 
     /// Helper method to find a ping group entity by ID

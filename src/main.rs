@@ -1,4 +1,5 @@
 mod client;
+mod constant;
 mod model;
 
 #[cfg(feature = "server")]
