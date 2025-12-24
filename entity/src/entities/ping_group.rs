@@ -2,32 +2,30 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "fleet_message")]
+#[sea_orm(table_name = "ping_group")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    pub fleet_id: i32,
-    pub channel_id: String,
-    pub message_id: String,
-    pub message_type: String,
-    pub created_at: DateTimeUtc,
+    pub guild_id: String,
+    pub name: String,
+    pub cooldown: Option<i32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::fleet::Entity",
-        from = "Column::FleetId",
-        to = "super::fleet::Column::Id",
+        belongs_to = "super::discord_guild::Entity",
+        from = "Column::GuildId",
+        to = "super::discord_guild::Column::GuildId",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    Fleet,
+    DiscordGuild,
 }
 
-impl Related<super::fleet::Entity> for Entity {
+impl Related<super::discord_guild::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Fleet.def()
+        Relation::DiscordGuild.def()
     }
 }
 
