@@ -5,7 +5,10 @@
 //! the conversion of database entity models into domain models for usage within services
 //! & controllers.
 
-use sea_orm::DatabaseConnection;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
+    IntoActiveModel, QueryFilter,
+};
 
 use crate::server::{
     error::AppError,
@@ -35,13 +38,27 @@ impl<'a> PingGroupRepository<'a> {
     /// Creates a new ping group
     ///
     /// # Arguments
+    /// - `guild_id` - The ID of the guild the ping group belongs to
     /// - `param` - Create parameters containing the ping group creation data
     ///
     /// # Returns
     /// - `Ok(PingGroup)` - The created domain model as a domain model
     /// - `Err(AppError::Database)` - Database error during insert operation
-    pub async fn create(&self, param: CreatePingGroupParam) -> Result<PingGroup, AppError> {
-        todo!()
+    pub async fn create(
+        &self,
+        guild_id: u64,
+        param: CreatePingGroupParam,
+    ) -> Result<PingGroup, AppError> {
+        let entity = entity::prelude::PingGroup::insert(entity::ping_group::ActiveModel {
+            guild_id: ActiveValue::Set(guild_id.to_string()),
+            name: ActiveValue::Set(param.name),
+            cooldown: ActiveValue::Set(param.cooldown),
+            ..Default::default()
+        })
+        .exec_with_returning(self.db)
+        .await?;
+
+        Ok(PingGroup::from_entity(entity)?)
     }
 
     /// Finds a ping group by ID
@@ -54,8 +71,13 @@ impl<'a> PingGroupRepository<'a> {
     /// - `Ok(Some(PingGroup))` - The requested ping group domain model if found
     /// - `Ok(None)` - The requested ping group does not exist
     /// - `Err(AppError::Database)` - Database error during get operation
+    /// - `Err(AppError::InternalError(ParseStringId))` - Failed to parse guild ID string to u64
     pub async fn find_by_id(&self, guild_id: u64, id: i32) -> Result<Option<PingGroup>, AppError> {
-        todo!()
+        let Some(entity) = self.find_entity_by_id(guild_id, id).await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(PingGroup::from_entity(entity)?))
     }
 
     /// Updates the ping group based upon provided ID & update parameters
@@ -74,7 +96,21 @@ impl<'a> PingGroupRepository<'a> {
         id: i32,
         param: UpdatePingGroupParam,
     ) -> Result<PingGroup, AppError> {
-        todo!()
+        let Some(entity) = self.find_entity_by_id(guild_id, id).await? else {
+            return Err(AppError::NotFound(format!(
+                "Failed to find ping group ID {} for guild ID {} while attempting update",
+                id, guild_id
+            )));
+        };
+
+        let mut active_model = entity.into_active_model();
+
+        active_model.name = ActiveValue::Set(param.name);
+        active_model.cooldown = ActiveValue::Set(param.cooldown);
+
+        let entity = active_model.update(self.db).await?;
+
+        Ok(PingGroup::from_entity(entity)?)
     }
 
     /// Deletes ping group of the provided ID
@@ -84,9 +120,28 @@ impl<'a> PingGroupRepository<'a> {
     /// - `id` - The ID of the ping group to delete
     ///
     /// # Returns
-    /// - `Ok(())` - The ping group was successfully deleted
+    /// - `Ok(()))` - The ping group was successfully deleted
     /// - `Err(AppError::Database)` - Database error during delete operation
     pub async fn delete(&self, guild_id: u64, id: i32) -> Result<(), AppError> {
-        todo!()
+        entity::prelude::PingGroup::delete_many()
+            .filter(entity::ping_group::Column::Id.eq(id))
+            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
+            .exec(self.db)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Helper method to find a ping group entity by ID
+    async fn find_entity_by_id(
+        &self,
+        guild_id: u64,
+        id: i32,
+    ) -> Result<Option<entity::ping_group::Model>, DbErr> {
+        entity::prelude::PingGroup::find()
+            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
+            .filter(entity::ping_group::Column::Id.eq(id))
+            .one(self.db)
+            .await
     }
 }
