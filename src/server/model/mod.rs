@@ -11,6 +11,7 @@ pub mod channel_fleet_list;
 pub mod discord;
 pub mod fleet;
 pub mod fleet_message;
+pub mod page;
 pub mod ping_format;
 pub mod ping_group;
 pub mod user;

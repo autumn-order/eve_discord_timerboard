@@ -5,6 +5,7 @@
 //! the conversion of database entity models into domain models for usage within services
 //! & controllers.
 
+use dioxus_logger::tracing;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
     IntoActiveModel, PaginatorTrait, QueryFilter,
@@ -80,6 +81,37 @@ impl<'a> PingGroupRepository<'a> {
         Ok(Some(PingGroup::from_entity(entity)?))
     }
 
+    pub async fn list_by_guild(
+        &self,
+        guild_id: u64,
+        page: u64,
+        per_page: u64,
+    ) -> Result<(Vec<PingGroup>, u64), AppError> {
+        let paginator = entity::prelude::PingGroup::find()
+            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
+            .paginate(self.db, per_page);
+
+        let total = paginator.num_items().await?;
+        let entities = paginator.fetch_page(page).await?;
+
+        let ping_groups = entities
+            .into_iter()
+            .map(PingGroup::from_entity)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok((ping_groups, total))
+    }
+
+    /// Counts the number of ping groups for a guild
+    pub async fn count_by_guild(&self, guild_id: u64) -> Result<usize, AppError> {
+        let count = entity::prelude::PingGroup::find()
+            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
+            .count(self.db)
+            .await?;
+
+        Ok(count as usize)
+    }
+
     /// Updates the ping group based upon provided ID & update parameters
     ///
     /// # Arguments
@@ -130,16 +162,6 @@ impl<'a> PingGroupRepository<'a> {
             .await?;
 
         Ok(())
-    }
-
-    /// Counts the number of ping groups for a guild
-    pub async fn count_by_guild(&self, guild_id: u64) -> Result<usize, AppError> {
-        let count = entity::prelude::PingGroup::find()
-            .filter(entity::ping_group::Column::GuildId.eq(guild_id.to_string()))
-            .count(self.db)
-            .await?;
-
-        Ok(count as usize)
     }
 
     /// Helper method to find a ping group entity by ID

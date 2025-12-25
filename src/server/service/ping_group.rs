@@ -5,7 +5,10 @@ use crate::{
     server::{
         data::ping_group::PingGroupRepository,
         error::AppError,
-        model::ping_group::{CreatePingGroupParam, PingGroup, UpdatePingGroupParam},
+        model::{
+            page::Page,
+            ping_group::{CreatePingGroupParam, PingGroup, UpdatePingGroupParam},
+        },
     },
 };
 
@@ -46,6 +49,19 @@ impl<'a> PingGroupService<'a> {
         };
 
         Ok(ping_group)
+    }
+
+    pub async fn list_by_guild(
+        &self,
+        guild_id: u64,
+        page: u64,
+        per_page: u64,
+    ) -> Result<Page<PingGroup>, AppError> {
+        let repo = PingGroupRepository::new(self.db);
+
+        let (ping_groups, total) = repo.list_by_guild(guild_id, page, per_page).await?;
+
+        Ok(Page::new(ping_groups, total, page, per_page))
     }
 
     pub async fn update(
