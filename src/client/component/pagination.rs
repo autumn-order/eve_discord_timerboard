@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
 
+use crate::model::pagination::PageDto;
+
 use super::Modal;
 
 #[derive(Clone, PartialEq)]
@@ -8,6 +10,17 @@ pub struct PaginationData {
     pub per_page: u64,
     pub total: u64,
     pub total_pages: u64,
+}
+
+impl<T> From<PageDto<T>> for PaginationData {
+    fn from(page: PageDto<T>) -> Self {
+        Self {
+            page: page.page,
+            per_page: page.per_page,
+            total: page.total,
+            total_pages: page.total_pages,
+        }
+    }
 }
 
 #[component]

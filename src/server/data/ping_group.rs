@@ -52,7 +52,7 @@ impl<'a> PingGroupRepository<'a> {
         let entity = entity::prelude::PingGroup::insert(entity::ping_group::ActiveModel {
             guild_id: ActiveValue::Set(guild_id.to_string()),
             name: ActiveValue::Set(param.name),
-            cooldown: ActiveValue::Set(param.cooldown),
+            cooldown: ActiveValue::Set(param.cooldown.map(|d| d.num_seconds() as i32)),
             ..Default::default()
         })
         .exec_with_returning(self.db)
@@ -118,7 +118,7 @@ impl<'a> PingGroupRepository<'a> {
         let mut active_model = entity.into_active_model();
 
         active_model.name = ActiveValue::Set(param.name);
-        active_model.cooldown = ActiveValue::Set(param.cooldown);
+        active_model.cooldown = ActiveValue::Set(param.cooldown.map(|d| d.num_seconds() as i32));
 
         let entity = active_model.update(self.db).await?;
 

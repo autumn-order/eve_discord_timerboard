@@ -4,6 +4,8 @@
 //! and provides methods to convert the ping group domain model from entity
 //! and into Dtos
 
+use chrono::Duration;
+
 use crate::{
     model::ping_group::{CreatePingGroupDto, PingGroupDto, UpdatePingGroupDto},
     server::{error::AppError, util::parse::parse_u64_from_string},
@@ -18,7 +20,7 @@ pub struct PingGroup {
     pub id: i32,
     pub guild_id: u64,
     pub name: String,
-    pub cooldown: Option<i32>,
+    pub cooldown: Option<Duration>,
 }
 
 impl PingGroup {
@@ -37,7 +39,7 @@ impl PingGroup {
             id: entity.id,
             guild_id,
             name: entity.name,
-            cooldown: entity.cooldown,
+            cooldown: entity.cooldown.map(|s| Duration::seconds(s as i64)),
         })
     }
 
@@ -58,7 +60,7 @@ impl PingGroup {
 #[derive(Debug, Clone)]
 pub struct CreatePingGroupParam {
     pub name: String,
-    pub cooldown: Option<i32>,
+    pub cooldown: Option<Duration>,
 }
 
 impl From<CreatePingGroupDto> for CreatePingGroupParam {
@@ -77,7 +79,7 @@ impl From<CreatePingGroupDto> for CreatePingGroupParam {
 #[derive(Debug, Clone)]
 pub struct UpdatePingGroupParam {
     pub name: String,
-    pub cooldown: Option<i32>,
+    pub cooldown: Option<Duration>,
 }
 
 impl From<UpdatePingGroupDto> for UpdatePingGroupParam {

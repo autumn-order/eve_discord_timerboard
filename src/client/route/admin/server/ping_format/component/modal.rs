@@ -349,7 +349,7 @@ fn PingFormatFormFields(mut form_fields: Signal<FormFieldsData>, is_submitting: 
             input {
                 r#type: "text",
                 class: "input input-bordered w-full",
-                placeholder: "e.g., Standard Ping, CTA Ping",
+                placeholder: "e.g., Default",
                 value: "{form_fields().name}",
                 disabled: is_submitting,
                 oninput: move |evt| {

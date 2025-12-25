@@ -109,7 +109,7 @@ pub fn FleetCategoryFormFields(
                 input {
                     r#type: "text",
                     class: "input input-bordered w-full",
-                    placeholder: "e.g., Structure Timers",
+                    placeholder: "e.g, Roam, Stratop, CTA",
                     value: "{form_fields().category_name}",
                     oninput: move |evt| {
                         form_fields.write().category_name = evt.value();
