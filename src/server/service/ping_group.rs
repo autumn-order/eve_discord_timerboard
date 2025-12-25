@@ -6,7 +6,7 @@ use crate::{
         data::ping_group::PingGroupRepository,
         error::AppError,
         model::{
-            page::Page,
+            pagination::Page,
             ping_group::{CreatePingGroupParam, PingGroup, UpdatePingGroupParam},
         },
     },
@@ -37,18 +37,6 @@ impl<'a> PingGroupService<'a> {
         }
 
         repo.create(guild_id, param).await
-    }
-
-    pub async fn get_by_id(&self, guild_id: u64, id: i32) -> Result<PingGroup, AppError> {
-        let repo = PingGroupRepository::new(self.db);
-
-        let Some(ping_group) = repo.find_by_id(guild_id, id).await? else {
-            return Err(AppError::NotFound(
-                "The requested ping group does not exist".to_string(),
-            ));
-        };
-
-        Ok(ping_group)
     }
 
     pub async fn list_by_guild(

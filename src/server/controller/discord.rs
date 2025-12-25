@@ -5,7 +5,6 @@ use axum::{
     Json,
 };
 use dioxus_logger::tracing;
-use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::{
@@ -14,6 +13,7 @@ use crate::{
         discord::{DiscordGuildChannelDto, DiscordGuildDto, DiscordGuildRoleDto},
     },
     server::{
+        controller::param::PaginationParam,
         error::AppError,
         middleware::auth::{AuthGuard, Permission},
         service::discord::{
@@ -25,18 +25,6 @@ use crate::{
 
 /// Tag for grouping discord endpoints in OpenAPI documentation
 pub static DISCORD_TAG: &str = "discord";
-
-#[derive(Deserialize)]
-pub struct PaginationParams {
-    #[serde(default)]
-    pub page: u64,
-    #[serde(default = "default_entries")]
-    pub entries: u64,
-}
-
-fn default_entries() -> u64 {
-    10
-}
 
 /// Get all Discord guilds.
 ///
@@ -171,7 +159,7 @@ pub async fn get_discord_guild_roles(
     State(state): State<AppState>,
     session: Session,
     Path(guild_id): Path<i64>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<PaginationParam>,
 ) -> Result<impl IntoResponse, AppError> {
     let _ = AuthGuard::new(&state.db, &session)
         .require(&[Permission::Admin])
@@ -223,7 +211,7 @@ pub async fn get_discord_guild_channels(
     State(state): State<AppState>,
     session: Session,
     Path(guild_id): Path<i64>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<PaginationParam>,
 ) -> Result<impl IntoResponse, AppError> {
     let _ = AuthGuard::new(&state.db, &session)
         .require(&[Permission::Admin])

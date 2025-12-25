@@ -3,5 +3,7 @@ pub mod auth;
 pub mod category;
 pub mod discord;
 pub mod fleet;
+pub mod param;
 pub mod ping_format;
+pub mod ping_group;
 pub mod user;

@@ -4,7 +4,10 @@
 //! and provides methods to convert the ping group domain model from entity
 //! and into Dtos
 
-use crate::server::{error::AppError, util::parse::parse_u64_from_string};
+use crate::{
+    model::ping_group::{CreatePingGroupDto, PingGroupDto, UpdatePingGroupDto},
+    server::{error::AppError, util::parse::parse_u64_from_string},
+};
 
 /// The ping group domain model
 ///
@@ -37,6 +40,15 @@ impl PingGroup {
             cooldown: entity.cooldown,
         })
     }
+
+    pub fn into_dto(self) -> PingGroupDto {
+        PingGroupDto {
+            id: self.id,
+            guild_id: self.guild_id,
+            name: self.name,
+            cooldown: self.cooldown,
+        }
+    }
 }
 
 /// Parameters for creating a new ping group
@@ -49,6 +61,15 @@ pub struct CreatePingGroupParam {
     pub cooldown: Option<i32>,
 }
 
+impl From<CreatePingGroupDto> for CreatePingGroupParam {
+    fn from(dto: CreatePingGroupDto) -> Self {
+        Self {
+            name: dto.name,
+            cooldown: dto.cooldown,
+        }
+    }
+}
+
 /// Parameters for updating an existing ping group
 ///
 /// Updates a ping group with the provided name and if applicable, a cooldown shared
@@ -57,4 +78,13 @@ pub struct CreatePingGroupParam {
 pub struct UpdatePingGroupParam {
     pub name: String,
     pub cooldown: Option<i32>,
+}
+
+impl From<UpdatePingGroupDto> for UpdatePingGroupParam {
+    fn from(dto: UpdatePingGroupDto) -> Self {
+        Self {
+            name: dto.name,
+            cooldown: dto.cooldown,
+        }
+    }
 }

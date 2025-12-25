@@ -5,7 +5,6 @@
 //! the conversion of database entity models into domain models for usage within services
 //! & controllers.
 
-use dioxus_logger::tracing;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, DbErr, EntityTrait,
     IntoActiveModel, PaginatorTrait, QueryFilter,
@@ -60,25 +59,6 @@ impl<'a> PingGroupRepository<'a> {
         .await?;
 
         Ok(PingGroup::from_entity(entity)?)
-    }
-
-    /// Finds a ping group by ID
-    ///
-    /// # Arguments
-    /// - `guild_id` - The ID of the guild the ping group belongs to
-    /// - `id` - ID of the ping group to retrieve
-    ///
-    /// # Returns
-    /// - `Ok(Some(PingGroup))` - The requested ping group domain model if found
-    /// - `Ok(None)` - The requested ping group does not exist
-    /// - `Err(AppError::Database)` - Database error during get operation
-    /// - `Err(AppError::InternalError(ParseStringId))` - Failed to parse guild ID string to u64
-    pub async fn find_by_id(&self, guild_id: u64, id: i32) -> Result<Option<PingGroup>, AppError> {
-        let Some(entity) = self.find_entity_by_id(guild_id, id).await? else {
-            return Ok(None);
-        };
-
-        Ok(Some(PingGroup::from_entity(entity)?))
     }
 
     pub async fn list_by_guild(

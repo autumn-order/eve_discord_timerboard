@@ -4,7 +4,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::{
@@ -13,6 +12,7 @@ use crate::{
         ping_format::{CreatePingFormatDto, PingFormatDto, UpdatePingFormatDto},
     },
     server::{
+        controller::param::PaginationParam,
         error::AppError,
         middleware::auth::{AuthGuard, Permission},
         model::ping_format::{
@@ -26,18 +26,6 @@ use crate::{
 
 /// Tag for grouping ping format endpoints in OpenAPI documentation
 pub static PING_FORMAT_TAG: &str = "ping_format";
-
-#[derive(Deserialize)]
-pub struct PaginationParams {
-    #[serde(default)]
-    pub page: u64,
-    #[serde(default = "default_entries")]
-    pub entries: u64,
-}
-
-fn default_entries() -> u64 {
-    10
-}
 
 /// Create a new ping format.
 ///
@@ -141,7 +129,7 @@ pub async fn get_ping_formats(
     State(state): State<AppState>,
     session: Session,
     Path(guild_id): Path<u64>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<PaginationParam>,
 ) -> Result<impl IntoResponse, AppError> {
     let _ = AuthGuard::new(&state.db, &session)
         .require(&[Permission::Admin])

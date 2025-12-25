@@ -4,7 +4,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::{
@@ -16,6 +15,7 @@ use crate::{
         },
     },
     server::{
+        controller::param::PaginationParam,
         error::AppError,
         middleware::auth::{AuthGuard, Permission},
         model::category::{CreateFleetCategoryParams, UpdateFleetCategoryParams},
@@ -26,18 +26,6 @@ use crate::{
 
 /// Tag for grouping category endpoints in OpenAPI documentation
 pub static CATEGORY_TAG: &str = "category";
-
-#[derive(Deserialize)]
-pub struct PaginationParams {
-    #[serde(default)]
-    pub page: u64,
-    #[serde(default = "default_entries")]
-    pub entries: u64,
-}
-
-fn default_entries() -> u64 {
-    10
-}
 
 /// Create a new fleet category.
 ///
@@ -131,7 +119,7 @@ pub async fn get_fleet_categories(
     State(state): State<AppState>,
     session: Session,
     Path(guild_id): Path<u64>,
-    Query(params): Query<PaginationParams>,
+    Query(params): Query<PaginationParam>,
 ) -> Result<impl IntoResponse, AppError> {
     let _ = AuthGuard::new(&state.db, &session)
         .require(&[Permission::Admin])
