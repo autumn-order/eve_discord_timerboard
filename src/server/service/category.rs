@@ -2,7 +2,7 @@ use sea_orm::DatabaseConnection;
 
 use crate::server::{
     data::{
-        category::FleetCategoryRepository,
+        category::FleetCategoryRepository, ping_group::PingGroupRepository,
         user_category_permission::UserCategoryPermissionRepository,
     },
     error::AppError,
@@ -55,6 +55,21 @@ impl<'a> FleetCategoryService<'a> {
         &self,
         params: CreateFleetCategoryParams,
     ) -> Result<FleetCategory, AppError> {
+        // Validate ping_group_id exists if provided
+        if let Some(ping_group_id) = params.ping_group_id {
+            let ping_group_repo = PingGroupRepository::new(self.db);
+            if ping_group_repo
+                .find_by_id(params.guild_id, ping_group_id)
+                .await?
+                .is_none()
+            {
+                return Err(AppError::NotFound(format!(
+                    "Ping group with id {} not found",
+                    ping_group_id
+                )));
+            }
+        }
+
         let repo = FleetCategoryRepository::new(self.db);
 
         let category = repo.create(params).await?;
@@ -162,6 +177,21 @@ impl<'a> FleetCategoryService<'a> {
         // Check if category exists and belongs to the guild
         if !repo.exists_in_guild(params.id, params.guild_id).await? {
             return Ok(None);
+        }
+
+        // Validate ping_group_id exists if provided
+        if let Some(ping_group_id) = params.ping_group_id {
+            let ping_group_repo = PingGroupRepository::new(self.db);
+            if ping_group_repo
+                .find_by_id(params.guild_id, ping_group_id)
+                .await?
+                .is_none()
+            {
+                return Err(AppError::NotFound(format!(
+                    "Ping group with id {} not found",
+                    ping_group_id
+                )));
+            }
         }
 
         let _category = repo.update(params.clone()).await?;

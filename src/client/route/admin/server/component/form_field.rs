@@ -42,6 +42,7 @@ pub struct AccessRoleData {
 pub struct FormFieldData {
     pub category_name: String,
     pub ping_format_id: Option<i32>,
+    pub ping_group_id: Option<i32>,
     pub search_query: String,
     pub ping_cooldown_str: String,
     pub ping_reminder_str: String,
@@ -62,10 +63,15 @@ pub fn FleetCategoryFormFields(
     validation_errors: Signal<ValidationErrorData>,
     is_submitting: bool,
     ping_formats: Signal<Vec<PingFormatDto>>,
+    ping_groups: Signal<Vec<crate::model::ping_group::PingGroupDto>>,
 ) -> Element {
     // Create mutable signal for ping format search
     let mut ping_format_search = use_signal(String::new);
     let mut ping_format_dropdown_open = use_signal(|| false);
+
+    // Create mutable signal for ping group search
+    let mut ping_group_search = use_signal(String::new);
+    let mut ping_group_dropdown_open = use_signal(|| false);
 
     // Filter ping formats based on search query
     let filtered_formats = use_memo(move || {
@@ -81,6 +87,20 @@ pub fn FleetCategoryFormFields(
         }
     });
 
+    // Filter ping groups based on search query
+    let filtered_ping_groups = use_memo(move || {
+        let groups = ping_groups();
+        let query = ping_group_search().to_lowercase();
+        if query.is_empty() {
+            groups
+        } else {
+            groups
+                .into_iter()
+                .filter(|g| g.name.to_lowercase().contains(&query))
+                .collect::<Vec<_>>()
+        }
+    });
+
     // Get selected format name for display
     let selected_format_name = use_memo(move || {
         let formats = ping_formats();
@@ -91,10 +111,20 @@ pub fn FleetCategoryFormFields(
         }
     });
 
+    // Get selected ping group name for display
+    let selected_ping_group_name = use_memo(move || {
+        let groups = ping_groups();
+        if let Some(id) = form_fields().ping_group_id {
+            groups.iter().find(|g| g.id == id).map(|g| g.name.clone())
+        } else {
+            None
+        }
+    });
+
     rsx! {
         // Top section - horizontal layout for better space usage
         div {
-            class: "grid grid-cols-1 md:grid-cols-2 gap-4",
+            class: "grid grid-cols-1 md:grid-cols-3 gap-4",
 
             // Category Name Input
             div {
@@ -153,8 +183,66 @@ pub fn FleetCategoryFormFields(
                 label {
                     class: "label",
                     span {
-                        class: "label-text-alt",
-                        "Select the ping format to use for this fleet category"
+                        class: "label-text-alt break-words",
+                        "Select ping format"
+                    }
+                }
+            }
+
+            // Ping Group Dropdown with Search (Optional)
+            div {
+                class: "form-control w-full flex flex-col gap-2",
+                label {
+                    class: "label",
+                    span {
+                        class: "label-text",
+                        "Ping Group (optional)"
+                    }
+                }
+                div {
+                    class: "flex items-center gap-2",
+                    div {
+                        class: "flex-1",
+                        SearchableDropdown {
+                            search_query: ping_group_search,
+                            placeholder: "Search ping groups...".to_string(),
+                            display_value: selected_ping_group_name(),
+                            disabled: is_submitting,
+                            required: false,
+                            has_items: !filtered_ping_groups().is_empty(),
+                            show_dropdown_signal: Some(ping_group_dropdown_open),
+                            for group in filtered_ping_groups() {
+                                DropdownItem {
+                                    key: "{group.id}",
+                                    selected: Some(group.id) == form_fields().ping_group_id,
+                                    on_select: move |_| {
+                                        form_fields.write().ping_group_id = Some(group.id);
+                                        ping_group_search.set(String::new());
+                                        ping_group_dropdown_open.set(false);
+                                    },
+                                    "{group.name}"
+                                }
+                            }
+                        }
+                    }
+                    if form_fields().ping_group_id.is_some() {
+                        button {
+                            r#type: "button",
+                            class: "btn btn-sm2 btn-error btn-square flex-shrink-0",
+                            disabled: is_submitting,
+                            onclick: move |_| {
+                                form_fields.write().ping_group_id = None;
+                                ping_group_search.set(String::new());
+                            },
+                            "✕"
+                        }
+                    }
+                }
+                label {
+                    class: "label",
+                    span {
+                        class: "label-text-alt break-words",
+                        "Group to share cooldowns"
                     }
                 }
             }

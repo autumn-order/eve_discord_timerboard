@@ -144,6 +144,22 @@ impl<'a> PingGroupRepository<'a> {
         Ok(())
     }
 
+    /// Finds a ping group by ID within a specific guild
+    ///
+    /// # Arguments
+    /// - `guild_id` - The ID of the guild the ping group belongs to
+    /// - `id` - The ID of the ping group to retrieve
+    ///
+    /// # Returns
+    /// - `Ok(Some(PingGroup))` - The ping group if found in the specified guild
+    /// - `Ok(None)` - If no ping group exists with the given ID in the guild
+    /// - `Err(AppError::Database)` - Database error during fetch operation
+    pub async fn find_by_id(&self, guild_id: u64, id: i32) -> Result<Option<PingGroup>, AppError> {
+        let entity = self.find_entity_by_id(guild_id, id).await?;
+
+        entity.map(PingGroup::from_entity).transpose()
+    }
+
     /// Helper method to find a ping group entity by ID
     async fn find_entity_by_id(
         &self,

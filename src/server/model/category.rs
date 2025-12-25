@@ -249,6 +249,7 @@ pub struct CreateFleetCategoryParams {
     pub guild_id: u64,
     pub ping_format_id: i32,
     pub name: String,
+    pub ping_group_id: Option<i32>,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
     pub max_pre_ping: Option<Duration>,
@@ -263,6 +264,7 @@ impl CreateFleetCategoryParams {
             guild_id,
             ping_format_id: dto.ping_format_id,
             name: dto.name,
+            ping_group_id: dto.ping_group_id,
             ping_lead_time: dto.ping_lead_time,
             ping_reminder: dto.ping_reminder,
             max_pre_ping: dto.max_pre_ping,
@@ -283,6 +285,7 @@ pub struct UpdateFleetCategoryParams {
     pub guild_id: u64,
     pub ping_format_id: i32,
     pub name: String,
+    pub ping_group_id: Option<i32>,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
     pub max_pre_ping: Option<Duration>,
@@ -302,6 +305,7 @@ impl UpdateFleetCategoryParams {
             guild_id,
             ping_format_id: dto.ping_format_id,
             name: dto.name,
+            ping_group_id: dto.ping_group_id,
             ping_lead_time: dto.ping_lead_time,
             ping_reminder: dto.ping_reminder,
             max_pre_ping: dto.max_pre_ping,
@@ -378,6 +382,7 @@ pub struct FleetCategory {
     pub ping_format_id: i32,
     pub ping_format_name: String,
     pub name: String,
+    pub ping_group_id: Option<i32>,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
     pub max_pre_ping: Option<Duration>,
@@ -432,6 +437,7 @@ impl FleetCategory {
                 .map(|pf| pf.name)
                 .unwrap_or_else(|| "Unknown".to_string()),
             name: data.category.name,
+            ping_group_id: data.category.ping_group_id,
             ping_lead_time: data
                 .category
                 .ping_cooldown
@@ -461,6 +467,7 @@ impl FleetCategory {
             ping_format_id: self.ping_format_id,
             ping_format_name: self.ping_format_name,
             name: self.name,
+            ping_group_id: self.ping_group_id,
             ping_lead_time: self.ping_lead_time,
             ping_reminder: self.ping_reminder,
             max_pre_ping: self.max_pre_ping,
@@ -490,6 +497,7 @@ pub struct FleetCategoryListItem {
     pub ping_format_id: i32,
     pub ping_format_name: String,
     pub name: String,
+    pub ping_group_id: Option<i32>,
     pub ping_lead_time: Option<Duration>,
     pub ping_reminder: Option<Duration>,
     pub max_pre_ping: Option<Duration>,
@@ -523,6 +531,7 @@ impl FleetCategoryListItem {
                 .map(|pf| pf.name)
                 .unwrap_or_else(|| "Unknown".to_string()),
             name: data.category.name,
+            ping_group_id: data.category.ping_group_id,
             ping_lead_time: data
                 .category
                 .ping_cooldown
@@ -553,6 +562,7 @@ impl FleetCategoryListItem {
             ping_format_id: category.ping_format_id,
             ping_format_name: String::new(),
             name: category.name,
+            ping_group_id: category.ping_group_id,
             ping_lead_time: category.ping_cooldown.map(|s| Duration::seconds(s as i64)),
             ping_reminder: category.ping_reminder.map(|s| Duration::seconds(s as i64)),
             max_pre_ping: category.max_pre_ping.map(|s| Duration::seconds(s as i64)),
@@ -573,6 +583,7 @@ impl FleetCategoryListItem {
             ping_format_id: self.ping_format_id,
             ping_format_name: self.ping_format_name,
             name: self.name,
+            ping_group_id: self.ping_group_id,
             ping_lead_time: self.ping_lead_time,
             ping_reminder: self.ping_reminder,
             max_pre_ping: self.max_pre_ping,
