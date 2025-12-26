@@ -36,98 +36,13 @@ impl<'a> FleetNotificationService<'a> {
     /// - `Err(AppError::Database)` - Database error retrieving fleets or categories
     pub async fn post_upcoming_fleets_list(&self, channel_id: u64) -> Result<(), AppError> {
         let channel_id_obj = ChannelId::new(channel_id);
-        let now = chrono::Utc::now();
-
-        let category_repo = FleetCategoryRepository::new(self.db);
-        let fleet_repo = FleetRepository::new(self.db);
-        let message_repo = FleetMessageRepository::new(self.db);
         let list_repo = ChannelFleetListRepository::new(self.db);
 
-        // Get all categories that post to this channel
-        let category_ids = category_repo
-            .get_category_ids_by_channel(channel_id)
-            .await?;
-
-        if category_ids.is_empty() {
-            tracing::debug!(
-                "No categories configured for channel {}, skipping list update",
-                channel_id
-            );
-            return Ok(());
-        }
-
-        // Get all upcoming fleets for these categories
-        let fleets = fleet_repo
-            .get_upcoming_by_categories(category_ids.clone(), now)
-            .await?;
-
-        if fleets.is_empty() {
+        // Build the fleet list embed (returns None if no fleets and allow_empty=false)
+        let Some(embed) = self.build_fleet_list_embed(channel_id, false).await? else {
             tracing::debug!("No upcoming fleets for channel {}", channel_id);
-            // No upcoming fleets, optionally delete existing list message
-            return Ok(());
-        }
-
-        // Get categories data for names
-        let category_map = category_repo.get_names_by_ids(category_ids.clone()).await?;
-
-        // Get guild_id from the first category for building message links
-        let guild_id = if !category_ids.is_empty() {
-            // Get one category to extract guild_id
-            if let Some(category_data) = category_repo.find_by_id(category_ids[0]).await? {
-                category_data.category.guild_id
-            } else {
-                return Ok(());
-            }
-        } else {
             return Ok(());
         };
-
-        // Build description with bullet list of fleets
-        let mut description = String::new();
-
-        for fleet in fleets {
-            let category_name = category_map
-                .get(&fleet.category_id)
-                .map(|s| s.as_str())
-                .unwrap_or("Unknown");
-
-            // Get the most recent message for this fleet in this channel (prefer reminder over creation)
-            let messages = message_repo
-                .get_by_fleet_id_and_channel(fleet.id, channel_id)
-                .await?;
-
-            // Find reminder or creation message (not formup)
-            let message_link = messages
-                .iter()
-                .filter(|m| m.message_type == "reminder" || m.message_type == "creation")
-                .max_by_key(|m| &m.created_at)
-                .map(|m| {
-                    format!(
-                        "https://discord.com/channels/{}/{}/{}",
-                        guild_id, channel_id, m.message_id
-                    )
-                });
-
-            if let Some(link) = message_link {
-                // Format: • Category - [Fleet Name](link) - relative time
-                let line = format!(
-                    "• {} - [{}]({}) - <t:{}:R>\n",
-                    category_name,
-                    fleet.name,
-                    link,
-                    fleet.fleet_time.timestamp()
-                );
-                description.push_str(&line);
-            }
-        }
-
-        // Build embed with description containing the fleet list
-        let embed = CreateEmbed::new()
-            .title(".:Upcoming Events:.")
-            .url(&self.app_url)
-            .description(description)
-            .color(0x5865F2) // Discord blurple color
-            .timestamp(Timestamp::from_unix_timestamp(now.timestamp()).unwrap());
 
         // Get or create the list message
         let existing_list = list_repo.get_by_channel_id(channel_id).await?;
@@ -174,6 +89,166 @@ impl<'a> FleetNotificationService<'a> {
         }
 
         Ok(())
+    }
+
+    /// Updates the upcoming fleets list by only editing the existing message.
+    ///
+    /// This method is used when a fleet is updated or deleted to reflect changes
+    /// in the upcoming fleets list without bumping it to the most recent message.
+    /// If there are no upcoming fleets, it displays "No upcoming fleets..." message.
+    ///
+    /// # Arguments
+    /// - `channel_id` - Discord channel ID
+    ///
+    /// # Returns
+    /// - `Ok(())` - Successfully updated the upcoming fleets list
+    /// - `Err(AppError::InternalError)` - Invalid channel or message ID format
+    /// - `Err(AppError::Database)` - Database error retrieving fleets or categories
+    pub async fn update_upcoming_fleets_list(&self, channel_id: u64) -> Result<(), AppError> {
+        let channel_id_obj = ChannelId::new(channel_id);
+        let list_repo = ChannelFleetListRepository::new(self.db);
+
+        // Build the fleet list embed (allow_empty=true to show "No upcoming fleets...")
+        let Some(embed) = self.build_fleet_list_embed(channel_id, true).await? else {
+            tracing::debug!(
+                "No categories configured for channel {}, skipping list update",
+                channel_id
+            );
+            return Ok(());
+        };
+
+        // Get the existing list message
+        let existing_list = list_repo.get_by_channel_id(channel_id).await?;
+
+        if let Some(existing) = existing_list {
+            // Always edit the existing message, never bump to most recent
+            self.edit_fleet_list_message(
+                channel_id_obj,
+                existing.message_id,
+                embed,
+                &list_repo,
+                channel_id,
+            )
+            .await?;
+            tracing::debug!(
+                "Updated upcoming fleets list in channel {} (edit only, no bump)",
+                channel_id
+            );
+        } else {
+            // No existing list, post new message
+            self.post_new_fleet_list_message(channel_id_obj, embed, &list_repo, channel_id)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Builds the fleet list embed with all upcoming fleets for a channel.
+    ///
+    /// Fetches categories, fleets, and builds the embed description with fleet links.
+    ///
+    /// # Arguments
+    /// - `channel_id` - Discord channel ID
+    /// - `allow_empty` - If true, returns embed with "No upcoming fleets..." when no fleets.
+    ///                   If false, returns None when no fleets.
+    ///
+    /// # Returns
+    /// - `Ok(Some(CreateEmbed))` - Successfully built embed
+    /// - `Ok(None)` - No categories configured OR (no fleets and !allow_empty)
+    /// - `Err(AppError)` - Database error
+    async fn build_fleet_list_embed(
+        &self,
+        channel_id: u64,
+        allow_empty: bool,
+    ) -> Result<Option<CreateEmbed>, AppError> {
+        let now = chrono::Utc::now();
+
+        let category_repo = FleetCategoryRepository::new(self.db);
+        let fleet_repo = FleetRepository::new(self.db);
+        let message_repo = FleetMessageRepository::new(self.db);
+
+        // Get all categories that post to this channel
+        let category_ids = category_repo
+            .get_category_ids_by_channel(channel_id)
+            .await?;
+
+        if category_ids.is_empty() {
+            return Ok(None);
+        }
+
+        // Get all upcoming fleets for these categories
+        let fleets = fleet_repo
+            .get_upcoming_by_categories(category_ids.clone(), now)
+            .await?;
+
+        // Get guild_id from the first category for building message links
+        let guild_id =
+            if let Some(category_data) = category_repo.find_by_id(category_ids[0]).await? {
+                category_data.category.guild_id
+            } else {
+                return Ok(None);
+            };
+
+        // Build description with bullet list of fleets
+        let description = if fleets.is_empty() {
+            if !allow_empty {
+                return Ok(None);
+            }
+            "No upcoming events scheduled.".to_string()
+        } else {
+            // Get categories data for names
+            let category_map = category_repo.get_names_by_ids(category_ids.clone()).await?;
+
+            let mut desc = String::new();
+
+            for fleet in fleets {
+                let category_name = category_map
+                    .get(&fleet.category_id)
+                    .map(|s| s.as_str())
+                    .unwrap_or("Unknown");
+
+                // Get the most recent message for this fleet in this channel (prefer reminder over creation)
+                let messages = message_repo
+                    .get_by_fleet_id_and_channel(fleet.id, channel_id)
+                    .await?;
+
+                // Find reminder or creation message (not formup)
+                let message_link = messages
+                    .iter()
+                    .filter(|m| m.message_type == "reminder" || m.message_type == "creation")
+                    .max_by_key(|m| &m.created_at)
+                    .map(|m| {
+                        format!(
+                            "https://discord.com/channels/{}/{}/{}",
+                            guild_id, channel_id, m.message_id
+                        )
+                    });
+
+                if let Some(link) = message_link {
+                    // Format: • Category - [Fleet Name](link) - relative time
+                    let line = format!(
+                        "• {} - [{}]({}) - <t:{}:R>\n",
+                        category_name,
+                        fleet.name,
+                        link,
+                        fleet.fleet_time.timestamp()
+                    );
+                    desc.push_str(&line);
+                }
+            }
+
+            desc
+        };
+
+        // Build embed with description containing the fleet list
+        let embed = CreateEmbed::new()
+            .title(".:Upcoming Events:.")
+            .url(&self.app_url)
+            .description(description)
+            .color(0x5865F2) // Discord blurple color
+            .timestamp(Timestamp::from_unix_timestamp(now.timestamp()).unwrap());
+
+        Ok(Some(embed))
     }
 
     /// Edits an existing fleet list message.
