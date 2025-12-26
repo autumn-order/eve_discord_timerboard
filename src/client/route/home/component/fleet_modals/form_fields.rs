@@ -469,7 +469,7 @@ pub fn FleetFormFields(
                 }
 
                 // Category Rules Section
-                if details.ping_lead_time.is_some() || details.ping_reminder.is_some() || details.max_pre_ping.is_some() {
+                if details.ping_lead_time.is_some() || details.ping_reminder.is_some() || details.max_pre_ping.is_some() || details.ping_group_name.is_some() {
                     div {
                         class: "divider mt-6 mb-4"
                     }
@@ -483,6 +483,42 @@ pub fn FleetFormFields(
                             class: "card bg-base-200 shadow-sm",
                             div {
                                 class: "card-body p-4 space-y-3",
+                                if let Some(ping_group_name) = &details.ping_group_name {
+                                    div {
+                                        class: "flex items-center gap-3",
+                                        div {
+                                            class: "badge badge-primary badge-lg gap-2 h-auto py-2",
+                                            svg {
+                                                xmlns: "http://www.w3.org/2000/svg",
+                                                class: "h-4 w-4",
+                                                fill: "none",
+                                                view_box: "0 0 24 24",
+                                                stroke: "currentColor",
+                                                path {
+                                                    stroke_linecap: "round",
+                                                    stroke_linejoin: "round",
+                                                    stroke_width: "2",
+                                                    d: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                                }
+                                            }
+                                        }
+                                        div {
+                                            class: "flex-1",
+                                            div { class: "font-semibold text-sm", "Ping Group" }
+                                            if let Some(cooldown) = details.ping_group_cooldown {
+                                                div {
+                                                    class: "text-sm opacity-80",
+                                                    "{ping_group_name} (shared {format_duration(&cooldown)} cooldown)"
+                                                }
+                                            } else {
+                                                div {
+                                                    class: "text-sm opacity-80",
+                                                    "{ping_group_name}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 if let Some(ping_lead_time) = details.ping_lead_time {
                                     div {
                                         class: "flex items-center gap-3",

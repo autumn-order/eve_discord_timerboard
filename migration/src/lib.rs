@@ -16,6 +16,8 @@ mod m20251212_000013_create_fleet_table;
 mod m20251212_000014_create_fleet_field_value_table;
 mod m20251212_000015_create_fleet_message_table;
 mod m20251216_000016_create_channel_fleet_list;
+mod m20251223_000017_create_ping_group;
+mod m20251223_000018_add_ping_group_to_fleet_category;
 
 pub struct Migrator;
 
@@ -39,6 +41,8 @@ impl MigratorTrait for Migrator {
             Box::new(m20251212_000014_create_fleet_field_value_table::Migration),
             Box::new(m20251212_000015_create_fleet_message_table::Migration),
             Box::new(m20251216_000016_create_channel_fleet_list::Migration),
+            Box::new(m20251223_000017_create_ping_group::Migration),
+            Box::new(m20251223_000018_add_ping_group_to_fleet_category::Migration),
         ]
     }
 }

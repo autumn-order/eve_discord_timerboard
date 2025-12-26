@@ -2,7 +2,10 @@ use chrono::Duration;
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
 
-use crate::{client::component::modal::FullScreenModal, model::ping_format::PingFormatDto};
+use crate::{
+    client::component::modal::FullScreenModal,
+    model::{ping_format::PingFormatDto, ping_group::PingGroupDto},
+};
 
 use super::{
     super::ValidationErrorData,
@@ -15,6 +18,7 @@ use crate::{
     client::api::{
         category::{create_fleet_category, get_fleet_category_by_id, update_fleet_category},
         ping_format::get_ping_formats,
+        ping_group::get_paginated_ping_groups,
     },
     model::category::{
         CreateFleetCategoryDto, FleetCategoryAccessRoleDto, FleetCategoryChannelDto,
@@ -26,6 +30,7 @@ use crate::{
 #[derive(Clone, Default)]
 struct DurationFields {
     ping_format_id: Option<i32>,
+    ping_group_id: Option<i32>,
     ping_cooldown: Option<Duration>,
     ping_reminder: Option<Duration>,
     max_pre_ping: Option<Duration>,
@@ -49,6 +54,7 @@ pub fn CreateCategoryModal(
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut ping_formats = use_signal(Vec::<PingFormatDto>::new);
+    let mut ping_groups = use_signal(Vec::<PingGroupDto>::new);
 
     // Fetch ping formats when modal opens
     #[cfg(feature = "web")]
@@ -64,6 +70,23 @@ pub fn CreateCategoryModal(
     use_effect(move || {
         if let Some(Some(result)) = ping_formats_future.read_unchecked().as_ref() {
             ping_formats.set(result.ping_formats.clone());
+        }
+    });
+
+    // Fetch ping groups when modal opens
+    #[cfg(feature = "web")]
+    let ping_groups_future = use_resource(move || async move {
+        if show() {
+            get_paginated_ping_groups(guild_id, 0, 100).await.ok()
+        } else {
+            None
+        }
+    });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = ping_groups_future.read_unchecked().as_ref() {
+            ping_groups.set(result.items.clone());
         }
     });
 
@@ -123,6 +146,7 @@ pub fn CreateCategoryModal(
                 let dto = CreateFleetCategoryDto {
                     ping_format_id,
                     name,
+                    ping_group_id: durations.ping_group_id,
                     ping_lead_time: durations.ping_cooldown,
                     ping_reminder: durations.ping_reminder,
                     max_pre_ping: durations.max_pre_ping,
@@ -188,6 +212,7 @@ pub fn CreateCategoryModal(
             error.set(None);
             let durations = DurationFields {
                 ping_format_id: fields.ping_format_id,
+                ping_group_id: fields.ping_group_id,
                 ping_cooldown: parse_duration(&fields.ping_cooldown_str),
                 ping_reminder: parse_duration(&fields.ping_reminder_str),
                 max_pre_ping: parse_duration(&fields.max_pre_ping_str),
@@ -217,7 +242,8 @@ pub fn CreateCategoryModal(
                     form_fields,
                     validation_errors,
                     is_submitting,
-                    ping_formats
+                    ping_formats,
+                    ping_groups
                 }
 
                 // Error Message
@@ -268,6 +294,7 @@ pub fn EditCategoryModal(
     let mut should_submit = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
     let mut ping_formats = use_signal(Vec::<PingFormatDto>::new);
+    let mut ping_groups = use_signal(Vec::<PingGroupDto>::new);
 
     // Fetch ping formats when modal opens
     #[cfg(feature = "web")]
@@ -283,6 +310,23 @@ pub fn EditCategoryModal(
     use_effect(move || {
         if let Some(Some(result)) = ping_formats_future.read_unchecked().as_ref() {
             ping_formats.set(result.ping_formats.clone());
+        }
+    });
+
+    // Fetch ping groups when modal opens
+    #[cfg(feature = "web")]
+    let ping_groups_future = use_resource(move || async move {
+        if show() {
+            get_paginated_ping_groups(guild_id, 0, 100).await.ok()
+        } else {
+            None
+        }
+    });
+
+    #[cfg(feature = "web")]
+    use_effect(move || {
+        if let Some(Some(result)) = ping_groups_future.read_unchecked().as_ref() {
+            ping_groups.set(result.items.clone());
         }
     });
 
@@ -302,6 +346,7 @@ pub fn EditCategoryModal(
             form_fields.set(FormFieldData {
                 category_name: category.name.clone(),
                 ping_format_id: Some(category.ping_format_id),
+                ping_group_id: category.ping_group_id,
                 search_query: String::new(),
                 ping_cooldown_str: category
                     .ping_lead_time
@@ -424,6 +469,7 @@ pub fn EditCategoryModal(
                 let dto = UpdateFleetCategoryDto {
                     ping_format_id,
                     name,
+                    ping_group_id: durations.ping_group_id,
                     ping_lead_time: durations.ping_cooldown,
                     ping_reminder: durations.ping_reminder,
                     max_pre_ping: durations.max_pre_ping,
@@ -489,6 +535,7 @@ pub fn EditCategoryModal(
             error.set(None);
             let durations = DurationFields {
                 ping_format_id: fields.ping_format_id,
+                ping_group_id: fields.ping_group_id,
                 ping_cooldown: parse_duration(&fields.ping_cooldown_str),
                 ping_reminder: parse_duration(&fields.ping_reminder_str),
                 max_pre_ping: parse_duration(&fields.max_pre_ping_str),
@@ -519,7 +566,8 @@ pub fn EditCategoryModal(
                     form_fields,
                     validation_errors,
                     is_submitting,
-                    ping_formats
+                    ping_formats,
+                    ping_groups
                 }
 
                 // Error Message

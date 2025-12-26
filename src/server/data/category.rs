@@ -58,6 +58,7 @@ impl<'a> FleetCategoryRepository<'a> {
             guild_id: ActiveValue::Set(params.guild_id.to_string()),
             ping_format_id: ActiveValue::Set(params.ping_format_id),
             name: ActiveValue::Set(params.name),
+            ping_group_id: ActiveValue::Set(params.ping_group_id),
             ping_cooldown: ActiveValue::Set(params.ping_lead_time.map(|d| d.num_seconds() as i32)),
             ping_reminder: ActiveValue::Set(params.ping_reminder.map(|d| d.num_seconds() as i32)),
             max_pre_ping: ActiveValue::Set(params.max_pre_ping.map(|d| d.num_seconds() as i32)),
@@ -330,6 +331,7 @@ impl<'a> FleetCategoryRepository<'a> {
         let mut active_model: entity::fleet_category::ActiveModel = category.into();
         active_model.ping_format_id = ActiveValue::Set(params.ping_format_id);
         active_model.name = ActiveValue::Set(params.name);
+        active_model.ping_group_id = ActiveValue::Set(params.ping_group_id);
         active_model.ping_cooldown =
             ActiveValue::Set(params.ping_lead_time.map(|d| d.num_seconds() as i32));
         active_model.ping_reminder =

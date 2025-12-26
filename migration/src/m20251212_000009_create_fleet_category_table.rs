@@ -61,4 +61,5 @@ pub enum FleetCategory {
     PingCooldown,
     PingReminder,
     MaxPrePing,
+    PingGroupId,
 }

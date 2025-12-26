@@ -15,4 +15,5 @@ pub mod discord;
 pub mod fleet;
 pub mod fleet_notification;
 pub mod ping_format;
+pub mod ping_group;
 pub mod user;

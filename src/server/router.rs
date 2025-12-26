@@ -228,6 +228,12 @@ pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
         .routes(routes!(controller::ping_format::update_ping_format))
         .routes(routes!(controller::ping_format::delete_ping_format));
 
+    let ping_group_routes = OpenApiRouter::new()
+        .routes(routes!(controller::ping_group::create_ping_group))
+        .routes(routes!(controller::ping_group::get_paginated_ping_groups))
+        .routes(routes!(controller::ping_group::update_ping_group))
+        .routes(routes!(controller::ping_group::delete_ping_group));
+
     // Fleet routes
     let fleet_routes = OpenApiRouter::new()
         .routes(routes!(controller::fleet::get_guild_members))
@@ -246,6 +252,7 @@ pub fn router(config: &Config) -> Result<Router<AppState>, AppError> {
         .merge(discord_routes)
         .merge(category_routes)
         .merge(ping_format_routes)
+        .merge(ping_group_routes)
         .merge(fleet_routes)
         .split_for_parts();
 

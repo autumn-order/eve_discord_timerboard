@@ -22,7 +22,8 @@ use crate::{
         data::{
             category::FleetCategoryRepository, discord::DiscordGuildMemberRepository,
             fleet::FleetRepository, ping_format::field::PingFormatFieldRepository,
-            user::UserRepository, user_category_permission::UserCategoryPermissionRepository,
+            ping_group::PingGroupRepository, user::UserRepository,
+            user_category_permission::UserCategoryPermissionRepository,
         },
         error::AppError,
         model::fleet::{CreateFleetParam, GetPaginatedFleetsByGuildParam, UpdateFleetParam},
@@ -613,53 +614,109 @@ impl<'a> FleetService<'a> {
         fleet_time: DateTime<Utc>,
         exclude_fleet_id: Option<i32>,
     ) -> Result<(), AppError> {
-        // Get the category to check ping_cooldown setting
-        let category = entity::prelude::FleetCategory::find_by_id(category_id)
-            .one(self.db)
-            .await?
-            .ok_or_else(|| AppError::NotFound("Category not found".to_string()))?;
+        let fleet_category_repo = FleetCategoryRepository::new(self.db);
 
-        // If no ping_cooldown is set, no validation needed
-        let Some(cooldown_seconds) = category.ping_cooldown else {
-            return Ok(());
+        // Get the category to check ping_cooldown and ping_group settings
+        let Some(category) = fleet_category_repo.find_by_id(category_id).await? else {
+            return Err(AppError::NotFound("Category not found".to_string()));
         };
 
-        // Calculate the time window to check
-        let cooldown_duration = chrono::Duration::seconds(cooldown_seconds as i64);
-        let time_window_start = fleet_time - cooldown_duration;
-        let time_window_end = fleet_time + cooldown_duration;
+        let guild_id = parse_u64_from_string(category.category.guild_id.clone())?;
 
-        // Query for conflicting fleets in the same category
-        let mut query = entity::prelude::Fleet::find()
-            .filter(entity::fleet::Column::CategoryId.eq(category_id))
-            .filter(entity::fleet::Column::FleetTime.gte(time_window_start))
-            .filter(entity::fleet::Column::FleetTime.lte(time_window_end));
+        // Check ping group cooldown first (shared across all categories in the group)
+        if let Some(ping_group_id) = category.category.ping_group_id {
+            let ping_group_repo = PingGroupRepository::new(self.db);
+            if let Some(ping_group) = ping_group_repo.find_by_id(guild_id, ping_group_id).await? {
+                if let Some(group_cooldown) = ping_group.cooldown {
+                    let cooldown_seconds = group_cooldown.num_seconds() as i32;
+                    let cooldown_duration = chrono::Duration::seconds(cooldown_seconds as i64);
+                    let time_window_start = fleet_time - cooldown_duration;
+                    let time_window_end = fleet_time + cooldown_duration;
 
-        // Exclude the current fleet if updating
-        if let Some(exclude_id) = exclude_fleet_id {
-            query = query.filter(entity::fleet::Column::Id.ne(exclude_id));
+                    // Get all categories in the same ping group
+                    let all_categories = entity::prelude::FleetCategory::find()
+                        .filter(entity::fleet_category::Column::PingGroupId.eq(ping_group_id))
+                        .all(self.db)
+                        .await?;
+
+                    let category_ids: Vec<i32> = all_categories.iter().map(|c| c.id).collect();
+
+                    // Query for conflicting fleets across ALL categories in the ping group
+                    let mut query = entity::prelude::Fleet::find()
+                        .filter(entity::fleet::Column::CategoryId.is_in(category_ids))
+                        .filter(entity::fleet::Column::FleetTime.gte(time_window_start))
+                        .filter(entity::fleet::Column::FleetTime.lte(time_window_end));
+
+                    // Exclude the current fleet if updating
+                    if let Some(exclude_id) = exclude_fleet_id {
+                        query = query.filter(entity::fleet::Column::Id.ne(exclude_id));
+                    }
+
+                    let conflicting_fleet = query.one(self.db).await?;
+
+                    if let Some(conflict) = conflicting_fleet {
+                        let cooldown_minutes = cooldown_seconds / 60;
+                        let hours = cooldown_minutes / 60;
+                        let minutes = cooldown_minutes % 60;
+
+                        let cooldown_display = if hours > 0 {
+                            format!("{} hour(s) {} minute(s)", hours, minutes)
+                        } else {
+                            format!("{} minute(s)", minutes)
+                        };
+
+                        return Err(AppError::BadRequest(format!(
+                            "Fleet time conflicts with another fleet in ping group '{}'. \
+                            This group has a shared cooldown of {} between all fleets. \
+                            Conflicting fleet at {}",
+                            ping_group.name,
+                            cooldown_display,
+                            conflict.fleet_time.format("%Y-%m-%d %H:%M UTC")
+                        )));
+                    }
+                }
+            }
         }
 
-        let conflicting_fleet = query.one(self.db).await?;
+        // Also check category-specific cooldown (applies only to fleets in this category)
+        if let Some(cooldown_seconds) = category.category.ping_cooldown {
+            // Calculate the time window to check
+            let cooldown_duration = chrono::Duration::seconds(cooldown_seconds as i64);
+            let time_window_start = fleet_time - cooldown_duration;
+            let time_window_end = fleet_time + cooldown_duration;
 
-        if let Some(conflict) = conflicting_fleet {
-            let cooldown_minutes = cooldown_seconds / 60;
-            let hours = cooldown_minutes / 60;
-            let minutes = cooldown_minutes % 60;
+            // Query for conflicting fleets in the same category
+            let mut query = entity::prelude::Fleet::find()
+                .filter(entity::fleet::Column::CategoryId.eq(category_id))
+                .filter(entity::fleet::Column::FleetTime.gte(time_window_start))
+                .filter(entity::fleet::Column::FleetTime.lte(time_window_end));
 
-            let cooldown_display = if hours > 0 {
-                format!("{} hour(s) {} minute(s)", hours, minutes)
-            } else {
-                format!("{} minute(s)", minutes)
-            };
+            // Exclude the current fleet if updating
+            if let Some(exclude_id) = exclude_fleet_id {
+                query = query.filter(entity::fleet::Column::Id.ne(exclude_id));
+            }
 
-            return Err(AppError::BadRequest(format!(
-                "Fleet time conflicts with another fleet in this category. \
-                Category requires a minimum spacing of {} between fleets. \
-                Conflicting fleet at {}",
-                cooldown_display,
-                conflict.fleet_time.format("%Y-%m-%d %H:%M UTC")
-            )));
+            let conflicting_fleet = query.one(self.db).await?;
+
+            if let Some(conflict) = conflicting_fleet {
+                let cooldown_minutes = cooldown_seconds / 60;
+                let hours = cooldown_minutes / 60;
+                let minutes = cooldown_minutes % 60;
+
+                let cooldown_display = if hours > 0 {
+                    format!("{} hour(s) {} minute(s)", hours, minutes)
+                } else {
+                    format!("{} minute(s)", minutes)
+                };
+
+                return Err(AppError::BadRequest(format!(
+                    "Fleet time conflicts with another fleet in this category. \
+                    Category requires a minimum spacing of {} between fleets. \
+                    Conflicting fleet at {}",
+                    cooldown_display,
+                    conflict.fleet_time.format("%Y-%m-%d %H:%M UTC")
+                )));
+            }
         }
 
         Ok(())

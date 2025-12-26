@@ -1,8 +1,10 @@
 mod component;
 
 pub mod ping_format;
+pub mod ping_group;
 
 pub use ping_format::ServerAdminPingFormat;
+pub use ping_group::ServerAdminPingGroup;
 
 use dioxus::prelude::*;
 use dioxus_logger::tracing;
@@ -19,7 +21,7 @@ use crate::{
     },
     model::{
         category::PaginatedFleetCategoriesDto, discord::DiscordGuildDto,
-        ping_format::PaginatedPingFormatsDto,
+        ping_format::PaginatedPingFormatsDto, ping_group::PaginatedPingGroupsDto,
     },
 };
 
@@ -66,6 +68,15 @@ pub struct PingFormatsCache {
     pub per_page: u64,
 }
 
+/// Cached ping formats data for a specific guild
+#[derive(Clone, PartialEq)]
+pub struct PingGroupsCache {
+    pub guild_id: u64,
+    pub data: Option<PaginatedPingGroupsDto>,
+    pub page: u64,
+    pub per_page: u64,
+}
+
 /// Layout component that provides guild context for server admin pages
 /// This layout is automatically dropped when navigating away from server admin pages,
 /// which cleans up the guild context.
@@ -95,6 +106,15 @@ pub fn ServerAdminLayout() -> Element {
         })
     });
 
+    use_context_provider(|| {
+        Signal::new(PingGroupsCache {
+            guild_id: 0,
+            data: None,
+            page: 0,
+            per_page: 10,
+        })
+    });
+
     rsx! {
         // Render child routes (ServerAdminFleetCategory or ServerAdminPingFormat)
         Outlet::<Route> {}
@@ -105,6 +125,7 @@ pub fn ServerAdminLayout() -> Element {
 pub enum ServerAdminTab {
     FleetCategories,
     PingFormats,
+    PingGroup,
 }
 
 #[component]
@@ -157,6 +178,12 @@ pub fn ActionTabs(guild_id: u64, active_tab: ServerAdminTab) -> Element {
                 role: "tab",
                 class: if active_tab == ServerAdminTab::FleetCategories { "tab tab-active" } else { "tab" },
                 "Fleet Categories"
+            }
+            Link {
+                to: Route::ServerAdminPingGroup { guild_id },
+                role: "tab",
+                class: if active_tab == ServerAdminTab::PingGroup { "tab tab-active" } else { "tab" },
+                "Ping Groups"
             }
             Link {
                 to: Route::ServerAdminPingFormat { guild_id },

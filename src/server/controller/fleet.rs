@@ -17,7 +17,7 @@ use crate::{
     },
     server::{
         data::{
-            category::FleetCategoryRepository,
+            category::FleetCategoryRepository, ping_group::PingGroupRepository,
             user_category_permission::UserCategoryPermissionRepository,
         },
         error::{auth::AuthError, AppError},
@@ -110,6 +110,25 @@ pub async fn get_category_details(
         })
         .collect();
 
+    // Fetch ping group details if ping_group_id is present
+    let (ping_group_name, ping_group_cooldown) = if let Some(ping_group_id) =
+        category_with_relations.category.ping_group_id
+    {
+        let ping_group_repo = PingGroupRepository::new(&state.db);
+        if let Ok(Some(ping_group)) = ping_group_repo.find_by_id(guild_id, ping_group_id).await {
+            (
+                Some(ping_group.name),
+                ping_group
+                    .cooldown
+                    .map(|d| chrono::Duration::seconds(d.num_seconds())),
+            )
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     // Build the response DTO
     let dto = FleetCategoryDetailsDto {
         id: category_with_relations.category.id,
@@ -120,6 +139,9 @@ pub async fn get_category_details(
             .map(|pf| pf.name)
             .unwrap_or_default(),
         name: category_with_relations.category.name.clone(),
+        ping_group_id: category_with_relations.category.ping_group_id,
+        ping_group_name,
+        ping_group_cooldown,
         ping_lead_time: category_with_relations
             .category
             .ping_cooldown
