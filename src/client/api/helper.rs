@@ -55,43 +55,38 @@ const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 
 /// Helper function to parse API responses with consistent error handling
 pub async fn parse_response<T: DeserializeOwned>(response: Response) -> Result<T, ApiError> {
-    let status = response.status() as u64;
+    let status = response.status();
 
-    if (200..300).contains(&status) {
-        response.json::<T>().await.map_err(|e| ApiError {
-            status: 500,
-            message: format!("Failed to parse response: {}", e),
+    if status >= 200 && status < 300 {
+        response.json::<T>().await.map_err(|e| {
+            tracing::error!(
+                "Failed to parse successful response (status {}): {}",
+                status,
+                e
+            );
+
+            ApiError {
+                status: 500,
+                message: format!(
+                    "Failed to parse response (server returned status {}): {}",
+                    status, e
+                ),
+            }
         })
     } else {
-        let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-            error_dto.error
-        } else {
-            response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string())
-        };
-
+        let (status, message) = extract_error_message(response).await;
         Err(ApiError { status, message })
     }
 }
 
 /// Helper function to parse empty success responses (204 No Content, 201 Created, etc.)
 pub async fn parse_empty_response(response: Response) -> Result<(), ApiError> {
-    let status = response.status() as u64;
+    let status = response.status();
 
-    if (200..300).contains(&status) {
+    if status >= 200 && status < 300 {
         Ok(())
     } else {
-        let message = if let Ok(error_dto) = response.json::<ErrorDto>().await {
-            error_dto.error
-        } else {
-            response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown error".to_string())
-        };
-
+        let (status, message) = extract_error_message(response).await;
         Err(ApiError { status, message })
     }
 }
@@ -223,4 +218,22 @@ pub fn serialize_json<T: serde::Serialize>(payload: &T) -> Result<String, ApiErr
         status: 500,
         message: format!("Failed to serialize request: {}", e),
     })
+}
+
+/// Helper function to extract error message from response body
+pub async fn extract_error_message(response: Response) -> (u16, String) {
+    let status = response.status();
+
+    // Get the response body once for error handling
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|_| "Unknown error".to_string());
+
+    // Try to parse as ErrorDto
+    let message = serde_json::from_str::<ErrorDto>(&body)
+        .map(|error_dto| error_dto.error)
+        .unwrap_or(body);
+
+    (status, message)
 }

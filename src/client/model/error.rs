@@ -1,6 +1,6 @@
 #[derive(Clone, Debug, PartialEq)]
 pub struct ApiError {
-    pub status: u64,
+    pub status: u16,
     pub message: String,
 }
 

@@ -3,6 +3,9 @@ use dioxus_logger::tracing;
 
 use crate::client::{constant::SITE_NAME, router::Route, store::user::UserState};
 
+#[cfg(feature = "web")]
+use crate::client::api::user::get_user;
+
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const LOGO: Asset = asset!(
@@ -24,8 +27,6 @@ pub fn App() -> Element {
     // Fetch user on first load
     #[cfg(feature = "web")]
     {
-        use crate::client::store::user::get_user;
-
         let future = use_resource(|| async move { get_user().await });
 
         match &*future.read_unchecked() {
@@ -34,7 +35,7 @@ pub fn App() -> Element {
                 user_store.write().fetched = true;
             }
             Some(Err(err)) => {
-                tracing::error!(err);
+                tracing::error!("{}", err);
 
                 user_store.write().fetched = true;
             }

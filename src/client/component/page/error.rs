@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 use crate::client::component::Page;
 
 #[component]
-pub fn ErrorPage(status: u64, message: String) -> Element {
+pub fn ErrorPage(status: u16, message: String) -> Element {
     let error = match status {
         403 => "Access Denied",
         404 => "Not Found",

@@ -1,6 +1,9 @@
 use crate::{
     client::{
-        api::helper::{delete, get, parse_empty_response, parse_response, post, send_request},
+        api::helper::{
+            delete, extract_error_message, get, parse_empty_response, parse_response, post,
+            send_request,
+        },
         model::error::ApiError,
     },
     model::{
@@ -9,6 +12,34 @@ use crate::{
         user::{PaginatedUsersDto, UserDto},
     },
 };
+
+pub async fn get_user() -> Result<Option<UserDto>, ApiError> {
+    let url = format!("/api/auth/user");
+    let response = send_request(|| get(&url)).await?;
+
+    let status = response.status();
+
+    match status {
+        200 => {
+            // Try to parse the response as UserDto
+            match response.json::<UserDto>().await {
+                Ok(user) => Ok(Some(user)),
+                Err(e) => {
+                    let message = format!("Failed to parse user data: {}", e);
+                    Err(ApiError {
+                        status: status.into(),
+                        message,
+                    })
+                }
+            }
+        }
+        404 => Ok(None),
+        _ => {
+            let (status, message) = extract_error_message(response).await;
+            Err(ApiError { status, message })
+        }
+    }
+}
 
 pub async fn get_all_users(page: u64, per_page: u64) -> Result<PaginatedUsersDto, ApiError> {
     let url = format!("/api/admin/users?page={}&per_page={}", page, per_page);
