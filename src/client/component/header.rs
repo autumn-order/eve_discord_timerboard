@@ -1,11 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_free_icons::{icons::fa_brands_icons::FaDiscord, Icon};
 
-use crate::client::{
-    constant::SITE_NAME,
-    model::auth::{AuthContext, AuthState},
-    router::Route,
-};
+use crate::client::{constant::SITE_NAME, model::auth::AuthState, router::Route};
 
 const LOGO: Asset = asset!(
     "/assets/logo.webp",
@@ -17,8 +13,8 @@ const LOGO: Asset = asset!(
 
 #[component]
 pub fn Header() -> Element {
-    let auth_context = use_context::<AuthContext>();
-    let auth = auth_context.read();
+    let auth_state = use_context::<Signal<AuthState>>();
+    let state = auth_state.read();
 
     rsx!(div {
         class: "fixed flex justify-between gap-4 w-full h-20 py-2 px-4 bg-base-200 z-20",
@@ -43,7 +39,7 @@ pub fn Header() -> Element {
         }
         div {
             class: "flex items-center gap-2",
-            {render_auth_buttons(&auth)}
+            {render_auth_buttons(&state)}
         }
     })
 }

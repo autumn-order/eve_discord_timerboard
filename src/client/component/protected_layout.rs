@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::client::{
     component::page::{ErrorPage, LoadingPage},
-    model::auth::{AuthContext, AuthState, Permission},
+    model::auth::{AuthState, Permission},
     router::Route,
 };
 
@@ -22,21 +22,18 @@ pub fn RequiresAdmin() -> Element {
 
 #[component]
 pub fn ProtectedLayout(permissions: Vec<Permission>) -> Element {
-    let auth_context = use_context::<AuthContext>();
+    let auth_state = use_context::<Signal<AuthState>>();
     let nav = navigator();
 
     // Handle redirect for unauthenticated users
-    {
-        let auth_context = auth_context.clone();
-        use_effect(move || {
-            let state = auth_context.read();
-            if matches!(&*state, AuthState::NotLoggedIn | AuthState::Error(_)) {
-                nav.push(Route::Login {});
-            }
-        });
-    }
+    use_effect(move || {
+        let state = auth_state.read();
+        if matches!(&*state, AuthState::NotLoggedIn | AuthState::Error(_)) {
+            nav.push(Route::Login {});
+        }
+    });
 
-    let state = auth_context.read();
+    let state = auth_state.read();
 
     rsx! {
         match &*state {

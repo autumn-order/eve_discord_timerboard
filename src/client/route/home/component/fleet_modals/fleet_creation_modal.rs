@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::{
     client::{
         component::modal::FullScreenModal,
-        model::{auth::AuthContext, cache::Cache, error::ApiError},
+        model::{auth::AuthState, cache::Cache, error::ApiError},
         route::home::{CategoryDetailsCache, GuildMembersCache},
     },
     model::{
@@ -27,10 +27,10 @@ pub fn FleetCreationModal(
     mut show: Signal<bool>,
     on_success: EventHandler<()>,
 ) -> Element {
-    let auth_context = use_context::<AuthContext>();
+    let auth_state = use_context::<Signal<AuthState>>();
     let manageable_categories_cache = use_context::<Signal<Cache<Vec<FleetCategoryListItemDto>>>>();
 
-    let state = auth_context.read();
+    let state = auth_state.read();
 
     let current_user_id = state.user_id();
 

@@ -1,43 +1,9 @@
-use dioxus::prelude::*;
-
 use crate::{client::model::error::ApiError, model::user::UserDto};
 
-#[cfg(feature = "web")]
-use crate::client::api::user::get_user;
-
-#[derive(Clone, Copy)]
-pub struct AuthContext {
-    inner: Signal<AuthState>,
-}
-
-impl AuthContext {
-    pub fn new() -> Self {
-        Self {
-            inner: Signal::new(AuthState::Initializing),
-        }
-    }
-
-    pub fn read(&self) -> impl std::ops::Deref<Target = AuthState> + '_ {
-        self.inner.read()
-    }
-
-    #[cfg(feature = "web")]
-    pub fn fetch_user(&mut self) {
-        let future = use_resource(get_user);
-        if let Some(result) = &*future.read_unchecked() {
-            let mut ctx = self.inner.write();
-            *ctx = match result {
-                Ok(Some(user)) => AuthState::Authenticated(user.clone()),
-                Ok(None) => AuthState::NotLoggedIn,
-                Err(e) => AuthState::Error(e.clone()),
-            };
-        }
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub enum AuthState {
     /// Initial state - haven't checked authentication yet
+    #[default]
     Initializing,
     /// User is authenticated
     Authenticated(UserDto),
@@ -62,6 +28,10 @@ pub enum Permission {
 }
 
 impl AuthState {
+    pub fn is_initializing(&self) -> bool {
+        matches!(self, AuthState::Initializing)
+    }
+
     /// Check if the user is authenticated
     pub fn is_authenticated(&self) -> bool {
         matches!(self, AuthState::Authenticated(_))

@@ -9,7 +9,7 @@ use crate::{
             DropdownItem, Modal, Page, SearchableDropdown,
         },
         constant::SITE_NAME,
-        model::{auth::AuthContext, error::ApiError},
+        model::{auth::AuthState, error::ApiError},
         route::admin::{AdminTab, AdminTabs, AdminUsersCache},
     },
     model::user::UserDto,
@@ -107,8 +107,8 @@ pub fn AdminUsers() -> Element {
 
 #[component]
 fn AdminsList(admins: Vec<UserDto>, mut refetch_trigger: Signal<u32>) -> Element {
-    let auth_context = use_context::<AuthContext>();
-    let auth = auth_context.read();
+    let auth_state = use_context::<Signal<AuthState>>();
+    let auth = auth_state.read();
 
     let current_user_id = auth.user_id();
 

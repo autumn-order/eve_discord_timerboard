@@ -4,7 +4,7 @@ use dioxus_free_icons::{icons::fa_brands_icons::FaDiscord, Icon};
 use crate::client::{
     component::{page::LoadingPage, Page},
     constant::SITE_NAME,
-    model::auth::{AuthContext, AuthState},
+    model::auth::AuthState,
     router::Route,
 };
 
@@ -18,21 +18,17 @@ const LOGO: Asset = asset!(
 
 #[component]
 pub fn Login() -> Element {
-    let auth_context = use_context::<AuthContext>();
+    let auth_state = use_context::<Signal<AuthState>>();
     let nav = navigator();
 
     // Handle redirect for authenticated users
-    {
-        let auth_context = use_context::<AuthContext>();
-        use_effect(move || {
-            let state = auth_context.read();
-            if matches!(&*state, AuthState::Authenticated(_)) {
-                nav.push(Route::Home {});
-            }
-        });
-    }
+    use_effect(move || {
+        if auth_state.read().is_authenticated() {
+            nav.push(Route::Home {});
+        }
+    });
 
-    let state = auth_context.read();
+    let state = auth_state.read();
 
     rsx! {
         Title { "Login | {SITE_NAME}" }

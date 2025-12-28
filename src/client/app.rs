@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::client::{constant::SITE_NAME, model::auth::AuthContext, router::Route};
+use crate::client::{constant::SITE_NAME, model::auth::AuthState, router::Route};
+
+#[cfg(feature = "web")]
+use crate::client::api::user::get_user;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
@@ -14,12 +17,27 @@ const LOGO: Asset = asset!(
 
 #[component]
 pub fn App() -> Element {
-    let mut auth_context = use_context_provider(AuthContext::new);
+    let mut auth_state = use_context_provider(|| Signal::new(AuthState::default()));
 
     // Fetch user on first load
     #[cfg(feature = "web")]
     {
-        auth_context.fetch_user();
+        let future = use_resource(move || async move {
+            if auth_state.peek().is_initializing() {
+                Some(get_user().await)
+            } else {
+                None
+            }
+        });
+
+        if let Some(Some(result)) = &*future.read_unchecked() {
+            let mut state = auth_state.write();
+            *state = match result {
+                Ok(Some(user)) => AuthState::Authenticated(user.clone()),
+                Ok(None) => AuthState::NotLoggedIn,
+                Err(e) => AuthState::Error(e.clone()),
+            };
+        }
     }
 
     rsx! {
