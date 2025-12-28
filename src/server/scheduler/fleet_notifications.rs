@@ -58,7 +58,7 @@ pub async fn start_scheduler(
     let job_app_url = app_url.clone();
 
     // Schedule job to run every minute for reminders and form-ups
-    let notifications_job = Job::new_async("* 0 * * * *", move |_uuid, _lock| {
+    let notifications_job = Job::new_async("0 0 * * * *", move |_uuid, _lock| {
         let db = job_db.clone();
         let http = job_http.clone();
         let app_url = job_app_url.clone();

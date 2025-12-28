@@ -39,7 +39,7 @@ pub fn FleetViewEditModal(
     mut refetch_trigger: Signal<u32>,
 ) -> Element {
     let auth_context = use_context::<AuthContext>();
-    let manageable_categories_cache = use_context::<Cache<Vec<FleetCategoryListItemDto>>>();
+    let manageable_categories_cache = use_context::<Signal<Cache<Vec<FleetCategoryListItemDto>>>>();
 
     let state = auth_context.read();
 
@@ -83,8 +83,6 @@ pub fn FleetViewEditModal(
     // Datetime validation error
     let mut datetime_error = use_signal(|| None::<String>);
 
-    let cache_clone = manageable_categories_cache.clone();
-
     // Permission check: user can manage if they are admin, have manage permission, or are the fleet commander
     let can_manage = use_memo(move || {
         if let Some(user) = &current_user {
@@ -97,7 +95,7 @@ pub fn FleetViewEditModal(
                     return true;
                 }
                 // Check if user has manage permission for this category
-                if let Some(categories) = cache_clone.read().data() {
+                if let Some(categories) = manageable_categories_cache().data() {
                     return categories.iter().any(|cat| cat.id == fleet.category_id);
                 }
             }

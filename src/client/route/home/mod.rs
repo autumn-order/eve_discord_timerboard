@@ -8,10 +8,7 @@ use crate::{
     client::{
         component::page::{ErrorPage, LoadingPage, Page},
         constant::SITE_NAME,
-        model::{
-            cache::{Cache, CacheState},
-            error::ApiError,
-        },
+        model::{cache::Cache, error::ApiError},
         route::home::component::{
             CategorySelectionModal, CreateFleetButton, FleetCreationModal, FleetTable,
         },
@@ -44,48 +41,90 @@ use crate::client::api::user::{get_user_guilds, get_user_manageable_categories};
 pub fn Home() -> Element {
     // Provide caches for child components
     let mut manageable_categories_cache =
-        use_context_provider(Cache::<Vec<FleetCategoryListItemDto>>::new);
+        use_context_provider(|| Signal::new(Cache::<Vec<FleetCategoryListItemDto>>::default()));
     let _guild_members_cache = use_context_provider(|| Signal::new(GuildMembersCache::default()));
     let _category_details_cache =
         use_context_provider(|| Signal::new(CategoryDetailsCache::default()));
 
-    let mut guilds_cache = Cache::<Vec<DiscordGuildDto>>::new();
+    let mut guilds_cache = use_signal(Cache::<Vec<DiscordGuildDto>>::default);
     let mut selected_guild = use_signal(|| None::<DiscordGuildDto>);
+    let mut can_create = use_signal(|| false);
     let refetch_trigger = use_signal(|| 0u32);
 
     #[cfg(feature = "web")]
     {
-        // Fetch user's guilds on first load
-        guilds_cache.fetch(get_user_guilds);
+        let mut current_guild_id = use_signal(|| None::<u64>);
 
-        // Fetch user's manageable categories for guild when selected guild changes
-        use_effect(move || {
-            if let Some(guild) = selected_guild() {
-                let guild_id = guild.guild_id;
-                manageable_categories_cache
-                    .refetch(move || get_user_manageable_categories(guild_id))
+        let guilds_future = use_resource(move || async move {
+            let should_fetch = !guilds_cache.peek().is_fetched();
+
+            if should_fetch {
+                guilds_cache.set(Cache::Loading);
+
+                Some(get_user_guilds().await)
+            } else {
+                None
             }
         });
-    }
 
-    let guilds = guilds_cache.read();
-    if let CacheState::Fetched(guilds_list) = &*guilds {
-        if selected_guild().is_none() && !guilds_list.is_empty() {
-            let first_guild = guilds_list.iter().min_by_key(|g| g.guild_id);
+        if let Some(Some(result)) = &*guilds_future.read_unchecked() {
+            guilds_cache.set(match result {
+                Ok(data) => Cache::Fetched(data.clone()),
+                Err(e) => Cache::Error(e.clone()),
+            });
+        }
 
-            if let Some(guild) = first_guild {
-                selected_guild.set(Some(guild.clone()));
+        // Fetch manageable categories when guild is selected
+        let categories_future = use_resource(move || async move {
+            if let Some(guild) = selected_guild() {
+                let guild_changed = *current_guild_id.peek() != Some(guild.guild_id);
+                let cache_not_fetched = !manageable_categories_cache.peek().is_fetched();
+
+                if guild_changed || cache_not_fetched {
+                    current_guild_id.set(Some(guild.guild_id));
+                    manageable_categories_cache.set(Cache::Loading);
+
+                    Some(get_user_manageable_categories(guild.guild_id).await)
+                } else {
+                    None
+                }
+            } else {
+                None
             }
+        });
+
+        // Fetch user's manageable categories for guild when selected guild changes
+        if let Some(Some(result)) = &*categories_future.read_unchecked() {
+            manageable_categories_cache.set(match result {
+                Ok(data) => Cache::Fetched(data.clone()),
+                Err(e) => Cache::Error(e.clone()),
+            });
         }
     }
 
+    use_effect(move || {
+        if let Some(guilds_list) = guilds_cache().data() {
+            if selected_guild().is_none() && !guilds_list.is_empty() {
+                let first_guild = guilds_list.iter().min_by_key(|g| g.guild_id);
+
+                if let Some(guild) = first_guild {
+                    selected_guild.set(Some(guild.clone()));
+                }
+            }
+        }
+
+        if let Some(manageable_categories) = manageable_categories_cache().data() {
+            can_create.set(!manageable_categories.is_empty())
+        }
+    });
+
     rsx! {
         Title { "{SITE_NAME}" }
-        match &*guilds {
-            CacheState::NotFetched | CacheState::Loading => rsx! {
+        match guilds_cache() {
+            Cache::NotFetched | Cache::Loading => rsx! {
                 LoadingPage { }
             },
-            CacheState::Fetched(guilds_list) if guilds_list.is_empty() => rsx! {
+            Cache::Fetched(guilds_list) if guilds_list.is_empty() => rsx! {
                 Page {
                     class: "flex items-center justify-center w-full h-full",
                     div {
@@ -100,7 +139,7 @@ pub fn Home() -> Element {
                     }
                 }
             },
-            CacheState::Fetched(guilds_list) => rsx! {
+            Cache::Fetched(guilds_list) => rsx! {
                 Page {
                     class: "flex flex-col items-center w-full h-full",
                     div {
@@ -109,6 +148,7 @@ pub fn Home() -> Element {
                             selected_guild,
                             guilds_list: guilds_list.clone(),
                             refetch_trigger,
+                            can_create
                         }
 
                         if let Some(guild) = selected_guild() {
@@ -120,7 +160,7 @@ pub fn Home() -> Element {
                     }
                 }
             },
-            CacheState::Error(error) => rsx! {
+            Cache::Error(error) => rsx! {
                 ErrorPage { status: error.status, message: error.message.to_string() }
             }
         }
@@ -132,6 +172,7 @@ fn TimerboardHeader(
     selected_guild: Signal<Option<DiscordGuildDto>>,
     guilds_list: Vec<DiscordGuildDto>,
     refetch_trigger: Signal<u32>,
+    can_create: Signal<bool>,
 ) -> Element {
     let mut show_create_modal = use_signal(|| false);
     let mut show_fleet_creation = use_signal(|| false);
@@ -143,20 +184,15 @@ fn TimerboardHeader(
             div {
                 class: "flex flex-wrap items-center justify-between gap-4",
                 if let Some(guild) = selected_guild() {
-                    {
-                        let guild_id = guild.guild_id;
+                    ServerSelector {
+                        selected_guild,
+                        guild,
+                        guilds_list
+                    }
 
-                        rsx! {
-                            ServerSelector {
-                                selected_guild,
-                                guild,
-                                guilds_list
-                            }
-
-                            CreateFleetButton {
-                                guild_id: guild_id,
-                                show_create_modal
-                            }
+                    if can_create() {
+                        CreateFleetButton {
+                            show_create_modal
                         }
                     }
                 }

@@ -28,7 +28,7 @@ pub fn FleetCreationModal(
     on_success: EventHandler<()>,
 ) -> Element {
     let auth_context = use_context::<AuthContext>();
-    let manageable_categories_cache = use_context::<Cache<Vec<FleetCategoryListItemDto>>>();
+    let manageable_categories_cache = use_context::<Signal<Cache<Vec<FleetCategoryListItemDto>>>>();
 
     let state = auth_context.read();
 

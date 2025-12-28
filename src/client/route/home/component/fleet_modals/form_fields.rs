@@ -81,24 +81,24 @@ pub fn FleetFormFields(
                             label {
                                 class: "label",
                                 span { class: "label-text", "Category" }
-                                select {
-                                    class: "select select-bordered w-full",
-                                    value: "{cat_id()}",
-                                    disabled: is_submitting,
-                                    onchange: move |e| {
-                                        if let Ok(new_id) = e.value().parse::<i32>() {
-                                            cat_id.set(new_id);
-                                            // Clear field values when category changes
-                                            field_values.set(HashMap::new());
-                                        }
-                                    },
-                                    for category in cats() {
-                                        option {
-                                            key: "{category.id}",
-                                            value: "{category.id}",
-                                            selected: category.id == cat_id(),
-                                            "{category.name}"
-                                        }
+                            }
+                            select {
+                                class: "select select-bordered w-full",
+                                value: "{cat_id()}",
+                                disabled: is_submitting,
+                                onchange: move |e| {
+                                    if let Ok(new_id) = e.value().parse::<i32>() {
+                                        cat_id.set(new_id);
+                                        // Clear field values when category changes
+                                        field_values.set(HashMap::new());
+                                    }
+                                },
+                                for category in cats() {
+                                    option {
+                                        key: "{category.id}",
+                                        value: "{category.id}",
+                                        selected: category.id == cat_id(),
+                                        "{category.name}"
                                     }
                                 }
                             }

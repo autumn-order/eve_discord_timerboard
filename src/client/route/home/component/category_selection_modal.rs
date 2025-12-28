@@ -12,8 +12,8 @@ pub fn CategorySelectionModal(
     mut show: Signal<bool>,
     on_category_selected: EventHandler<i32>,
 ) -> Element {
-    let cache = use_context::<Cache<Vec<FleetCategoryListItemDto>>>();
-    let manageable_categories = cache.read();
+    let cache = use_context::<Signal<Cache<Vec<FleetCategoryListItemDto>>>>();
+    let manageable_categories = cache();
 
     let categories = manageable_categories
         .data()
