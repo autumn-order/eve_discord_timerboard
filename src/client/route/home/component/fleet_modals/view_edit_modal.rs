@@ -8,7 +8,7 @@ use crate::{
     client::{
         component::modal::{ConfirmationModal, FullScreenModal},
         model::{auth::AuthState, cache::Cache, error::ApiError},
-        route::home::{CategoryDetailsCache, GuildMembersCache},
+        route::home::CategoryDetailsCache,
     },
     model::{
         category::{FleetCategoryDetailsDto, FleetCategoryListItemDto},
@@ -22,7 +22,7 @@ use crate::client::api::fleet::{
     delete_fleet, get_category_details, get_fleet, get_guild_members, update_fleet,
 };
 
-use super::form_fields::FleetFormFields;
+use super::{super::super::GuildMembersCache, FleetFormFields};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ViewEditMode {
@@ -301,65 +301,46 @@ pub fn FleetViewEditModal(
         });
     }
 
-    // Fetch guild members only if not cached
-    let mut should_fetch_members = use_signal(|| false);
-
     #[cfg(feature = "web")]
     {
-        // Check cache and initiate fetch if needed
-        use_effect(use_reactive!(|guild_id| {
-            // Skip if already fetching
-            if should_fetch_members() {
-                return;
-            }
+        // Fetch list of members for guild the fleet is being created for
+        let guilds_future = use_resource(move || async move {
+            let should_fetch = !guild_members_cache.peek().cache.is_fetched();
+            let is_loading = guild_members_cache.peek().cache.is_loading();
+            let guild_changed = guild_members_cache.peek().guild_id != Some(guild_id);
 
-            let mut cache_state = guild_members_cache.write();
+            if guild_changed || (should_fetch && !is_loading) {
+                guild_members_cache.set(GuildMembersCache {
+                    guild_id: Some(guild_id),
+                    cache: Cache::Loading,
+                });
 
-            // Check if we need to fetch
-            let needs_fetch = (cache_state.guild_id != Some(guild_id)
-                || cache_state.data.is_none())
-                && !cache_state.is_fetching;
-
-            if needs_fetch {
-                // Set fetching flag while we still hold the lock
-                cache_state.is_fetching = true;
-                drop(cache_state);
-                should_fetch_members.set(true);
-            }
-        }));
-
-        let fetch_members_future = use_resource(move || async move {
-            if should_fetch_members() {
                 Some(get_guild_members(guild_id).await)
             } else {
                 None
             }
         });
 
-        use_effect(move || {
-            if let Some(Some(result)) = fetch_members_future.read_unchecked().as_ref() {
-                match result {
-                    Ok(members) => {
-                        guild_members_cache.write().guild_id = Some(guild_id);
-                        guild_members_cache.write().data = Some(Ok(members.clone()));
-                        guild_members_cache.write().is_fetching = false;
-                        should_fetch_members.set(false);
-                    }
-                    Err(err) => {
-                        tracing::error!("Failed to fetch guild members: {}", err);
-                        guild_members_cache.write().guild_id = Some(guild_id);
-                        guild_members_cache.write().data = Some(Err(err.clone()));
-                        guild_members_cache.write().is_fetching = false;
-                        should_fetch_members.set(false);
-                    }
+        if let Some(Some(result)) = &*guilds_future.read_unchecked() {
+            let cache = &mut *guild_members_cache.write();
+
+            match result {
+                Ok(data) => {
+                    cache.cache = Cache::Fetched(data.clone());
                 }
-            }
-        });
+                Err(e) => {
+                    cache.cache = Cache::Error(e.clone());
+                }
+            };
+        }
     }
 
-    let guild_members = guild_members_cache.read().data.clone();
-    let manageable_categories = manageable_categories_cache
-        .read()
+    let guild_members = guild_members_cache()
+        .cache
+        .data()
+        .cloned()
+        .unwrap_or(Vec::new());
+    let manageable_categories = manageable_categories_cache()
         .data()
         .cloned()
         .unwrap_or(Vec::new());
@@ -675,7 +656,7 @@ pub fn FleetViewEditModal(
                                     fleet_description,
                                     field_values,
                                     category_details,
-                                    guild_members: use_signal(move || guild_members.clone()),
+                                    guild_members: use_signal(move || guild_members),
                                     is_submitting: is_submitting(),
                                     current_user_id,
                                     hidden,

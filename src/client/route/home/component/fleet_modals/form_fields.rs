@@ -44,7 +44,7 @@ pub fn FleetFormFields(
     mut fleet_description: Signal<String>,
     mut field_values: Signal<HashMap<i32, String>>,
     category_details: Signal<Option<Result<FleetCategoryDetailsDto, ApiError>>>,
-    guild_members: Signal<Option<Result<Vec<DiscordGuildMemberDto>, ApiError>>>,
+    guild_members: Signal<Vec<DiscordGuildMemberDto>>,
     is_submitting: bool,
     current_user_id: Option<u64>,
     // Fleet visibility options
@@ -254,75 +254,69 @@ pub fn FleetFormFields(
                             class: "label",
                             span { class: "label-text", "Fleet Commander" }
                         }
+                        {
+                            let members = guild_members();
+                            let selected_member = members.iter().find(|m| Some(m.user_id) == fleet_commander_id());
+                            let display_value = selected_member.map(|m| format!("{} (@{})", m.display_name, m.username));
 
-                        if let Some(Ok(members)) = guild_members() {
-                            {
-                                let selected_member = members.iter().find(|m| Some(m.user_id) == fleet_commander_id());
-                                let display_value = selected_member.map(|m| format!("{} (@{})", m.display_name, m.username));
+                            let search_lower = commander_search().to_lowercase();
+                            let mut filtered_members: Vec<_> = members.iter()
+                                .filter(|m| {
+                                    search_lower.is_empty() ||
+                                    m.display_name.to_lowercase().contains(&search_lower) ||
+                                    m.username.to_lowercase().contains(&search_lower)
+                                })
+                                .collect();
 
-                                let search_lower = commander_search().to_lowercase();
-                                let mut filtered_members: Vec<_> = members.iter()
-                                    .filter(|m| {
-                                        search_lower.is_empty() ||
-                                        m.display_name.to_lowercase().contains(&search_lower) ||
-                                        m.username.to_lowercase().contains(&search_lower)
-                                    })
-                                    .collect();
+                            // Sort to always put the logged-in user at the top
+                            if let Some(current_id) = current_user_id {
+                                filtered_members.sort_by_key(|m| {
+                                    if m.user_id == current_id {
+                                        0 // Current user first
+                                    } else {
+                                        1 // Everyone else after
+                                    }
+                                });
+                            }
 
-                                // Sort to always put the logged-in user at the top
-                                if let Some(current_id) = current_user_id {
-                                    filtered_members.sort_by_key(|m| {
-                                        if m.user_id == current_id {
-                                            0 // Current user first
-                                        } else {
-                                            1 // Everyone else after
-                                        }
-                                    });
-                                }
+                            rsx! {
+                                SearchableDropdown {
+                                    search_query: commander_search,
+                                    placeholder: "Search for a fleet commander...".to_string(),
+                                    display_value,
+                                    required: true,
+                                    disabled: is_submitting,
+                                    has_items: !filtered_members.is_empty(),
+                                    show_dropdown_signal: Some(show_commander_dropdown),
+                                    empty_message: "No guild members found".to_string(),
+                                    not_found_message: "No matching members found".to_string(),
 
-                                rsx! {
-                                    SearchableDropdown {
-                                        search_query: commander_search,
-                                        placeholder: "Search for a fleet commander...".to_string(),
-                                        display_value,
-                                        required: true,
-                                        disabled: is_submitting,
-                                        has_items: !filtered_members.is_empty(),
-                                        show_dropdown_signal: Some(show_commander_dropdown),
-                                        empty_message: "No guild members found".to_string(),
-                                        not_found_message: "No matching members found".to_string(),
+                                    for member in filtered_members {
+                                        {
+                                            let member_id = member.user_id;
+                                            let member_display = member.display_name.clone();
+                                            let member_username = member.username.clone();
+                                            let is_selected = Some(member_id) == fleet_commander_id();
 
-                                        for member in filtered_members {
-                                            {
-                                                let member_id = member.user_id;
-                                                let member_display = member.display_name.clone();
-                                                let member_username = member.username.clone();
-                                                let is_selected = Some(member_id) == fleet_commander_id();
-
-                                                rsx! {
-                                                    DropdownItem {
-                                                        key: "{member_id}",
-                                                        selected: is_selected,
-                                                        on_select: move |_| {
-                                                            fleet_commander_id.set(Some(member_id));
-                                                            show_commander_dropdown.set(false);
-                                                            commander_search.set(String::new());
-                                                        },
-                                                        div {
-                                                            class: "flex flex-col",
-                                                            span { class: "font-semibold", "{member_display}" }
-                                                            span { class: "text-sm opacity-70", "@{member_username}" }
-                                                        }
+                                            rsx! {
+                                                DropdownItem {
+                                                    key: "{member_id}",
+                                                    selected: is_selected,
+                                                    on_select: move |_| {
+                                                        fleet_commander_id.set(Some(member_id));
+                                                        show_commander_dropdown.set(false);
+                                                        commander_search.set(String::new());
+                                                    },
+                                                    div {
+                                                        class: "flex flex-col",
+                                                        span { class: "font-semibold", "{member_display}" }
+                                                        span { class: "text-sm opacity-70", "@{member_username}" }
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        } else {
-                            div {
-                                class: "skeleton h-12 w-full"
                             }
                         }
                     }

@@ -21,10 +21,9 @@ use crate::{
 
 // Cache for guild members per guild
 #[derive(Clone, Default)]
-pub struct GuildMembersCache {
+struct GuildMembersCache {
     pub guild_id: Option<u64>,
-    pub data: Option<Result<Vec<DiscordGuildMemberDto>, ApiError>>,
-    pub is_fetching: bool,
+    pub cache: Cache<Vec<DiscordGuildMemberDto>>,
 }
 
 // Cache for category details per category
@@ -40,11 +39,11 @@ use crate::client::api::user::{get_user_guilds, get_user_manageable_categories};
 #[component]
 pub fn Home() -> Element {
     // Provide caches for child components
-    let mut manageable_categories_cache =
-        use_context_provider(|| Signal::new(Cache::<Vec<FleetCategoryListItemDto>>::default()));
     let _guild_members_cache = use_context_provider(|| Signal::new(GuildMembersCache::default()));
     let _category_details_cache =
         use_context_provider(|| Signal::new(CategoryDetailsCache::default()));
+    let mut manageable_categories_cache =
+        use_context_provider(|| Signal::new(Cache::<Vec<FleetCategoryListItemDto>>::default()));
 
     let mut guilds_cache = use_signal(Cache::<Vec<DiscordGuildDto>>::default);
     let mut selected_guild = use_signal(|| None::<DiscordGuildDto>);
@@ -55,6 +54,7 @@ pub fn Home() -> Element {
     {
         let mut current_guild_id = use_signal(|| None::<u64>);
 
+        // Fetch guilds user has access to
         let guilds_future = use_resource(move || async move {
             let should_fetch = !guilds_cache.peek().is_fetched();
 
@@ -74,7 +74,7 @@ pub fn Home() -> Element {
             });
         }
 
-        // Fetch manageable categories when guild is selected
+        // Fetch user's manageable categories for guild when selected guild changes
         let categories_future = use_resource(move || async move {
             if let Some(guild) = selected_guild() {
                 let guild_changed = *current_guild_id.peek() != Some(guild.guild_id);
@@ -93,7 +93,6 @@ pub fn Home() -> Element {
             }
         });
 
-        // Fetch user's manageable categories for guild when selected guild changes
         if let Some(Some(result)) = &*categories_future.read_unchecked() {
             manageable_categories_cache.set(match result {
                 Ok(data) => Cache::Fetched(data.clone()),

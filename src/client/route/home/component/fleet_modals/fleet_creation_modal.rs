@@ -7,7 +7,7 @@ use crate::{
     client::{
         component::modal::FullScreenModal,
         model::{auth::AuthState, cache::Cache, error::ApiError},
-        route::home::{CategoryDetailsCache, GuildMembersCache},
+        route::home::CategoryDetailsCache,
     },
     model::{
         category::FleetCategoryListItemDto, fleet::CreateFleetDto, ping_format::PingFormatFieldType,
@@ -17,7 +17,7 @@ use crate::{
 #[cfg(feature = "web")]
 use crate::client::api::fleet::{create_fleet, get_category_details, get_guild_members};
 
-use super::FleetFormFields;
+use super::{super::super::GuildMembersCache, FleetFormFields};
 
 /// Modal for creating a new fleet with all required details
 #[component]
@@ -284,52 +284,46 @@ pub fn FleetCreationModal(
 
     // Use guild members cache from context
     let mut guild_members_cache = use_context::<Signal<GuildMembersCache>>();
-    let mut should_fetch_members = use_signal(|| false);
 
-    // Fetch guild members only if not cached or guild changed
     #[cfg(feature = "web")]
     {
-        // Check cache and initiate fetch if needed
-        use_effect(use_reactive!(|guild_id| {
-            // Skip if already fetching
-            if should_fetch_members() {
-                return;
-            }
+        // Fetch list of members for guild the fleet is being created for
+        let guilds_future = use_resource(move || async move {
+            let should_fetch = !guild_members_cache.peek().cache.is_fetched();
+            let is_loading = guild_members_cache.peek().cache.is_loading();
+            let guild_changed = guild_members_cache.peek().guild_id != Some(guild_id);
 
-            let mut cache_state = guild_members_cache.write();
+            if guild_changed || (should_fetch && !is_loading) {
+                guild_members_cache.set(GuildMembersCache {
+                    guild_id: Some(guild_id),
+                    cache: Cache::Loading,
+                });
 
-            // Check if we need to fetch
-            let needs_fetch = (cache_state.guild_id != Some(guild_id)
-                || cache_state.data.is_none())
-                && !cache_state.is_fetching;
-
-            if needs_fetch {
-                // Set fetching flag while we still hold the lock
-                cache_state.is_fetching = true;
-                drop(cache_state);
-                should_fetch_members.set(true);
-            }
-        }));
-
-        let guild_members_resource = use_resource(move || async move {
-            if should_fetch_members() {
                 Some(get_guild_members(guild_id).await)
             } else {
                 None
             }
         });
 
-        use_effect(move || {
-            if let Some(Some(result)) = guild_members_resource.read().as_ref() {
-                guild_members_cache.write().guild_id = Some(guild_id);
-                guild_members_cache.write().data = Some(result.clone());
-                guild_members_cache.write().is_fetching = false;
-                should_fetch_members.set(false);
-            }
-        });
+        if let Some(Some(result)) = &*guilds_future.read_unchecked() {
+            let cache = &mut *guild_members_cache.write();
+
+            match result {
+                Ok(data) => {
+                    cache.cache = Cache::Fetched(data.clone());
+                }
+                Err(e) => {
+                    cache.cache = Cache::Error(e.clone());
+                }
+            };
+        }
     }
 
-    let guild_members = guild_members_cache.read().data.clone();
+    let guild_members = guild_members_cache()
+        .cache
+        .data()
+        .cloned()
+        .unwrap_or(Vec::new());
 
     rsx! {
         FullScreenModal {
